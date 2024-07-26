@@ -5,6 +5,8 @@
 #include "imgui_impl_win32.h"
 #include <d3d9.h>
 
+#include "zip.h"
+
 #pragma comment (lib, "d3d9.lib")
 #pragma comment (lib, "Dwmapi.lib")
 
@@ -103,7 +105,7 @@ int InitState() {
     // Create application window
     //ImGui_ImplWin32_EnableDpiAwareness();
     ::RegisterClassExW(&wc);
-    hwnd = ::CreateWindowW(wc.lpszClassName, L"Retro", WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, nullptr, nullptr, wc.hInstance, nullptr);
+    hwnd = ::CreateWindowW(wc.lpszClassName, L"Future", WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, nullptr, nullptr, wc.hInstance, nullptr);
 
     if (!CreateDeviceD3D(hwnd))
     {
