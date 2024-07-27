@@ -1,3 +1,4 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include "filebox.h"
 #include <Windows.h>
 #include <shobjidl_core.h>
@@ -5,12 +6,24 @@
 
 extern HWND gHwnd;
 
-bool GetOpenFilePath(char** inputBuffer) {
+bool GetOpenFilePath(char** inputBuffer, FileBoxType type) {
     IFileDialog* pfd = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd));
 
     if (FAILED(hr)) {
         return false;
+    }
+    COMDLG_FILTERSPEC filters[3];
+    switch (type) {
+        case FileBoxType::Archive: {
+            filters[0].pszName = L"All Supported Archives";
+            filters[0].pszSpec = L"*.OTR;*.MPQ;*.O2R;*.ZIP";
+            filters[1].pszName = L"OTR Archives";
+            filters[1].pszSpec = L"*.OTR;*.MPQ";
+            filters[2].pszName = L"O2R Archives";
+            filters[2].pszSpec = L"*.O2R;*.ZIP";
+            pfd->SetFileTypes(3, filters);
+        }
     }
     DWORD options;
     pfd->GetOptions(&options);

@@ -1,11 +1,10 @@
 #include "ExploreArchive.h"
+#include "filebox.h"
 #include "imgui.h"
 #include "WindowMgr.h"
 #include "Windows.h"
 #include "zip.h"
 #include "stdlib.h"
-
-extern bool GetOpenFilePath(char** inputBuffer);
 
 ExploreWindow::ExploreWindow() {
 	// ImGui::InputText can't handle a null buffer being passed in.
@@ -36,7 +35,7 @@ void ExploreWindow::DrawWindow()
 	ImGui::InputText("Path", mPathBuff, 0, ImGuiInputTextFlags_::ImGuiInputTextFlags_ReadOnly);
 	ImGui::SameLine();
 	if (ImGui::Button("Open Archive")) {
-		GetOpenFilePath(&mPathBuff);
+		GetOpenFilePath(&mPathBuff, FileBoxType::Archive);
 		mFileChangedSinceValidation = true;
 	}
 

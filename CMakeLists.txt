@@ -45,7 +45,7 @@ file (GLOB future__utils_headers
     utils/*.h
 )
 
-include_directories(${future__utils_headers})
+include_directories(utils/)
 source_group("Utils" REGULAR_EXPRESSION "utils/*")
 
 
