@@ -121,6 +121,7 @@ int main(int, char**)
 // Helper functions
 
 int InitState() {
+#if defined(__linux__)
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
         printf("Error: %s\n", SDL_GetError());
         return -1;
@@ -176,14 +177,13 @@ int InitState() {
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-#if defined(_WIN32)
+#elif defined(_WIN32)
     // Create application window
     //ImGui_ImplWin32_EnableDpiAwareness();
     ::RegisterClassExW(&wc);
     gHwnd = ::CreateWindowW(wc.lpszClassName, L"Future", WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, nullptr, nullptr, wc.hInstance, nullptr);
 
-    if (!CreateDeviceD3D(gHwnd))
-    {
+    if (!CreateDeviceD3D(gHwnd)) {
         CleanupDeviceD3D();
         ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
         return 1;
@@ -208,36 +208,35 @@ void StartFrame() {
 #if defined(_WIN32)
     ImGui_ImplDX9_NewFrame();
     ImGui_ImplWin32_NewFrame();
+#elif defined(__linux__)
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL2_NewFrame();
 #endif
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
 }
 
 bool HandleEvents() {
+    bool rv = false;
 #if defined(_WIN32)
     MSG msg;
-    bool rv = false;
-    while (::PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE))
-    {
+    while (::PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE)) {
         ::TranslateMessage(&msg);
         ::DispatchMessage(&msg);
         if (msg.message == WM_QUIT)
             rv = true;
     }
     return rv;
+#elif defined(__linux__)
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        ImGui_ImplSDL2_ProcessEvent(&event);
+        if (event.type == SDL_QUIT)
+            rv = true;
+        if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
+            rv = true;
+    }
 #endif
-        SDL_Event event;
-        bool done;
-        while (SDL_PollEvent(&event))
-        {
-            ImGui_ImplSDL2_ProcessEvent(&event);
-            if (event.type == SDL_QUIT)
-                done = true;
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
-                done = true;
-        }
-return done;
+return rv;
 }
 
 void Render(const ImVec4& clear_color) {
@@ -248,8 +247,7 @@ void Render(const ImVec4& clear_color) {
     g_pd3dDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
     D3DCOLOR clear_col_dx = D3DCOLOR_RGBA((int)(clear_color.x*clear_color.w*255.0f), (int)(clear_color.y*clear_color.w*255.0f), (int)(clear_color.z*clear_color.w*255.0f), (int)(clear_color.w*255.0f));
     g_pd3dDevice->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, clear_col_dx, 1.0f, 0);
-    if (g_pd3dDevice->BeginScene() >= 0)
-    {
+    if (g_pd3dDevice->BeginScene() >= 0) {
         ImGui::Render();
         ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
         g_pd3dDevice->EndScene();
@@ -257,14 +255,15 @@ void Render(const ImVec4& clear_color) {
     HRESULT result = g_pd3dDevice->Present(nullptr, nullptr, nullptr, nullptr);
     if (result == D3DERR_DEVICELOST)
         g_DeviceLost = true;
+#elif defined(__linux__)
+    ImGui::Render();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+    glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    SDL_GL_SwapWindow(window);
 #endif
-        ImGui::Render();
-        ImGuiIO& io = ImGui::GetIO(); (void)io;
-        glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
-        glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
-        glClear(GL_COLOR_BUFFER_BIT);
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        SDL_GL_SwapWindow(window);
 }
 
 
@@ -277,7 +276,7 @@ void Shutdown() {
     CleanupDeviceD3D();
     ::DestroyWindow(gHwnd);
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
-#endif
+#elif defined(__linux__)
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
@@ -285,6 +284,7 @@ void Shutdown() {
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
     SDL_Quit();
+#endif
 }
 
 #if defined(_WIN32)
@@ -306,9 +306,7 @@ bool CreateDeviceD3D(HWND hWnd) {
 
     return true;
 }
-#endif
 
-#if defined(_Win32)
 void CleanupDeviceD3D()
 {
     if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = nullptr; }

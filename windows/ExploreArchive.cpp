@@ -5,6 +5,12 @@
 #include "zip.h"
 #include "stdlib.h"
 
+#if defined (_WIN32)
+#include <Windows.h>
+#elif defined (__linux__)
+#include <unistd.h>
+#endif
+
 ExploreWindow::ExploreWindow() {
 	// ImGui::InputText can't handle a null buffer being passed in.
 	// We will allocate one char to draw the box with no text. It will be resized
@@ -51,18 +57,27 @@ void ExploreWindow::DrawWindow()
 }
 
 
-bool ExploreWindow::ValidateInputFile()
-{
-	#if defined(_WIN32)
-	HANDLE inFile = CreateFileA(mPathBuff, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-	uint32_t header = 0;
+bool ExploreWindow::ValidateInputFile() {
 	bool rv;
+	uint32_t header = 0;
+#if defined(_WIN32)
+	HANDLE inFile = CreateFileA(mPathBuff, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 
 	if (!ReadFile(inFile, &header, 4, nullptr, nullptr)) {
 		CloseHandle(inFile);
 		return false;
 	}
 
+	CloseHandle(inFile);
+#elif defined(__linux__)
+	int fd;
+	fd = open(mPathBuff);
+	if (read(fd, &header, 4) != 4) {
+		return false;
+	}
+	close(fd);
+	
+#endif
 	if (((char*)&header)[0] == 'P' && ((char*)&header)[1] == 'K' && ((char*)&header)[2] == 3 && ((char*)&header)[3] == 4) {
 		rv = true;
 		mArchiveType = ArchiveType::O2R;
@@ -70,8 +85,5 @@ bool ExploreWindow::ValidateInputFile()
 	else {
 		rv = false;
 	}
-	CloseHandle(inFile);
 	return rv;
-	#endif
-	return true;
 }
