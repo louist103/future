@@ -1,12 +1,15 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include "filebox.h"
+#include <stdlib.h>
+#if defined(_WIN32)
 #include <Windows.h>
 #include <shobjidl_core.h>
-#include <stdlib.h>
-
 extern HWND gHwnd;
+#endif
+
 
 bool GetOpenFilePath(char** inputBuffer, FileBoxType type) {
+#if defined(_WIN32)
     IFileDialog* pfd = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd));
 
@@ -48,7 +51,7 @@ bool GetOpenFilePath(char** inputBuffer, FileBoxType type) {
         result->Release();
     }
     pfd->Release();
-
+#endif
     return true;
 
 }

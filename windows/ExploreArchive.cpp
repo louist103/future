@@ -2,7 +2,6 @@
 #include "filebox.h"
 #include "imgui.h"
 #include "WindowMgr.h"
-#include "Windows.h"
 #include "zip.h"
 #include "stdlib.h"
 
@@ -54,6 +53,7 @@ void ExploreWindow::DrawWindow()
 
 bool ExploreWindow::ValidateInputFile()
 {
+	#if defined(_WIN32)
 	HANDLE inFile = CreateFileA(mPathBuff, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 	uint32_t header = 0;
 	bool rv;
@@ -72,4 +72,6 @@ bool ExploreWindow::ValidateInputFile()
 	}
 	CloseHandle(inFile);
 	return rv;
+	#endif
+	return true;
 }

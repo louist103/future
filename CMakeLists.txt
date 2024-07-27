@@ -14,11 +14,15 @@ file (GLOB future__imgui
     extern/imgui/imgui_widgets.cpp
 )
 
-
-file (GLOB future__imgui_backend_win
-extern/imgui/backends/imgui_impl_dx9.cpp
-extern/imgui/backends/imgui_impl_win32.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    file (GLOB future__imgui_backend
+    extern/imgui/backends/imgui_impl_dx9.cpp
+    extern/imgui/backends/imgui_impl_win32.cpp)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    file (GLOB future__imgui_backend
+    extern/imgui/backends/imgui_impl_sdl2.cpp
+    extern/imgui/backends/imgui_impl_opengl3.cpp)
+endif()
 
 source_group("ImGui" REGULAR_EXPRESSION "extern/imgui/*")
 
@@ -34,7 +38,7 @@ file (GLOB future__windows_headers
         windows/*.h
 )
 
-include_directories(${future__windows_headers})
+include_directories(windows/)
 source_group("Windows" REGULAR_EXPRESSION "windows/")
 
 file (GLOB future__utils
@@ -52,7 +56,7 @@ source_group("Utils" REGULAR_EXPRESSION "utils/*")
 set(ALL_FILES
     ${future__imgui}
     ${future__main}
-    ${future__imgui_backend_win}
+    ${future__imgui_backend}
     ${future__windows}
     ${future__utils}
 )
@@ -79,10 +83,15 @@ vcpkg_install_packages(zlib bzip2 libzip)
 endif()
 
 
-
-set(LIBS d3d9 Dwmapi)
 add_executable(future ${ALL_FILES})
 #target_link_libraries(future ${LIBS})
 
 find_package(libzip REQUIRED)
 target_link_libraries(future PRIVATE libzip::zip)
+
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+find_package(SDL2 REQUIRED)
+target_link_libraries(future PRIVATE SDL2::SDL2)
+find_package(OpenGL)
+target_link_libraries(future PRIVATE OpenGL::GL)
+endif()
