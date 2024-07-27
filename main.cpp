@@ -28,7 +28,7 @@ static bool                     g_DeviceLost = false;
 static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
 static D3DPRESENT_PARAMETERS    g_d3dpp = {};
 static WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"Future", nullptr };
-static HWND hwnd;
+HWND gHwnd;
 
 WindowMgr gWindowMgr;
 
@@ -52,7 +52,11 @@ int main(int, char**)
     bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    io.Fonts->AddFontFromFileTTF("Roboto-Medium.ttf", 24.0f);
 
+    gWindowMgr.SetCurWindow(WindowId::Main);
+    gWindowMgr.ProcessWindowChange();
+    
     // Main loop
     while (true)
     {
@@ -91,6 +95,7 @@ int main(int, char**)
 
         // Rendering
         Render(clear_color);
+        gWindowMgr.ProcessWindowChange();
     }
 
     // Cleanup
@@ -105,9 +110,9 @@ int InitState() {
     // Create application window
     //ImGui_ImplWin32_EnableDpiAwareness();
     ::RegisterClassExW(&wc);
-    hwnd = ::CreateWindowW(wc.lpszClassName, L"Future", WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, nullptr, nullptr, wc.hInstance, nullptr);
+    gHwnd = ::CreateWindowW(wc.lpszClassName, L"Future", WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, nullptr, nullptr, wc.hInstance, nullptr);
 
-    if (!CreateDeviceD3D(hwnd))
+    if (!CreateDeviceD3D(gHwnd))
     {
         CleanupDeviceD3D();
         ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
@@ -115,15 +120,15 @@ int InitState() {
     }
 
     // Show the window
-    ::ShowWindow(hwnd, SW_SHOWDEFAULT);
-    ::UpdateWindow(hwnd);
+    ::ShowWindow(gHwnd, SW_SHOWDEFAULT);
+    ::UpdateWindow(gHwnd);
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
 
 
     // Setup Platform/Renderer backends
     ImGui::CreateContext();
-    ImGui_ImplWin32_Init(hwnd);
+    ImGui_ImplWin32_Init(gHwnd);
     ImGui_ImplDX9_Init(g_pd3dDevice);
 
     return 0;
@@ -172,7 +177,7 @@ void Shutdown() {
     ImGui::DestroyContext();
 
     CleanupDeviceD3D();
-    ::DestroyWindow(hwnd);
+    ::DestroyWindow(gHwnd);
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
 }
 

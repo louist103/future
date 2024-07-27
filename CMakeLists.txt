@@ -30,19 +30,31 @@ file (GLOB future__windows
         windows/*.cpp
 )
 
-source_group("Windows" REGULAR_EXPRESSION "windows/")
-
 file (GLOB future__windows_headers
         windows/*.h
 )
 
 include_directories(${future__windows_headers})
+source_group("Windows" REGULAR_EXPRESSION "windows/")
+
+file (GLOB future__utils
+    utils/*.cpp
+)
+
+file (GLOB future__utils_headers
+    utils/*.h
+)
+
+include_directories(${future__utils_headers})
+source_group("Utils" REGULAR_EXPRESSION "utils/*")
+
 
 set(ALL_FILES
     ${future__imgui}
     ${future__main}
     ${future__imgui_backend_win}
     ${future__windows}
+    ${future__utils}
 )
 
 ################################################################################

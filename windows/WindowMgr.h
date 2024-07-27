@@ -2,8 +2,10 @@
 #define WINDOWMGR_H
 
 #include <array>
-#include <functional>
+#include <memory>
+#include "WindowBase.h"
 #include "MainWindow.h"
+#include "ExploreArchive.h"
 
 enum class WindowId {
     Main,
@@ -15,18 +17,16 @@ enum class WindowId {
 typedef void (*drawFunc)();
 
 class WindowMgr {
+    std::unique_ptr<WindowBase> mCurWindow;
     WindowId mCurWindowId = WindowId::Main;
-    std::array<drawFunc, (size_t)WindowId::Max> mDrawFuncs = {
-        DrawMainWindow,
-        nullptr,
-        nullptr,
-    };
+    bool windowShouldChange = false;
 public:
     WindowId GetCurWindow();
     void SetCurWindow(WindowId id);
     void DisplayCurWindow();
+    void ProcessWindowChange();
 };
 
-
+extern WindowMgr gWindowMgr;
 
 #endif //WINDOWMGR_H
