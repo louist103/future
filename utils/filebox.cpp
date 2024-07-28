@@ -16,7 +16,7 @@ bool GetOpenFilePath(char** inputBuffer, FileBoxType type) {
     if (FAILED(hr)) {
         return false;
     }
-    COMDLG_FILTERSPEC filters[3];
+    COMDLG_FILTERSPEC filters[3] = { 0 };
     switch (type) {
         case FileBoxType::Archive: {
             filters[0].pszName = L"All Supported Archives";
@@ -54,4 +54,37 @@ bool GetOpenFilePath(char** inputBuffer, FileBoxType type) {
 #endif
     return true;
 
+}
+
+bool GetSaveFilePath(char** inputBuffer) {
+#if defined(_WIN32)
+    IFileDialog* pfd = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd));
+
+    if (FAILED(hr)) {
+        return false;
+    }
+
+    pfd->SetTitle(L"Save File");
+    hr = pfd->Show(gHwnd);
+
+    if (SUCCEEDED(hr)) {
+        IShellItem* result;
+        PWSTR path = nullptr;
+        hr = pfd->GetResult(&result);
+        result->GetDisplayName(SIGDN_FILESYSPATH, &path);
+        size_t len = lstrlenW(path);
+        if (*inputBuffer != nullptr) {
+            delete[] *inputBuffer;
+        }
+        *inputBuffer = new char[len + 1];
+        wcstombs(*inputBuffer, path, len);
+        // wcstombs doesn't null terminate the string for some reason...
+        (*inputBuffer)[len] = 0;
+        CoTaskMemFree(path);
+        result->Release();
+    }
+    pfd->Release();
+#endif
+    return true;
 }

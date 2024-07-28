@@ -7,7 +7,7 @@ enum class FileBoxType {
 };
 
 bool GetOpenFilePath(char** inputBuffer, FileBoxType type);
-
+bool GetSaveFilePath(char** inputBuffer);
 #ifdef _WIN32
 #endif
 
