@@ -5,12 +5,16 @@
 #include "zip.h"
 #include "stdlib.h"
 #include "imgui_memory_editor.h"
-
+#include "images.h"
+#include "zip_archive.h"
+#include "mpq_archive.h"
 #if defined (_WIN32)
 #include <Windows.h>
 #elif defined (__linux__)
+#include <fcntl.h>
 #include <unistd.h>
 #endif
+#include <immintrin.h>
 
 ExploreWindow::ExploreWindow() {
     // ImGui::InputText can't handle a null buffer being passed in.
@@ -23,6 +27,7 @@ ExploreWindow::ExploreWindow() {
 ExploreWindow::~ExploreWindow() {
     delete[] mPathBuff;
     mPathBuff = nullptr;
+    
 }
 
 void ExploreWindow::DrawWindow() {
@@ -47,53 +52,82 @@ void ExploreWindow::DrawWindow() {
             mFileChangedSinceValidation = false;
             mFailedToOpenArchive = false;
             mFileValidated = ValidateInputFile();
+            if (mArchive != nullptr && mArchive->IsArchiveOpen()) {
+                mArchive->CloseArchive();
+                mArchive = nullptr;
+            }
         }
 
-        if (zipArchive == nullptr && !mFailedToOpenArchive) {
+        if (mArchive == nullptr && !mFailedToOpenArchive) {
             mFailedToOpenArchive = OpenArchive();
         }
 
-        if (!mFailedToOpenArchive && mArchiveFiles.empty()) {
-            zip_int64_t numFiles = zip_get_num_entries(zipArchive,0);
-            if (numFiles != 0) {
-                for (zip_int64_t i = 0; i < numFiles; i++) {
-                    mArchiveFiles.push_back(zip_get_name(zipArchive, i, ZIP_FL_ENC_GUESS));
-                }
-            }
+        if (!mFailedToOpenArchive && mArchive->files.empty()) {
+            mArchive->GenFileList();
+        }
+    }
+    if (mArchive != nullptr) {
+        long long start, stop;
+        start = __rdtsc();
+        DrawFileList();
+        stop = __rdtsc();
+        ImVec2 curPos = ImGui::GetCursorPos();
+        ImGui::SetCursorPos({400.0f,20.0f});
+        ImGui::Text("MS to show list: %llu", (stop-start)/1996800);
+        ImGui::SetCursorPos(curPos);
+        if (viewWindow != nullptr) {
+            viewWindow->DrawWindow();
+            if (!viewWindow->mIsOpen)
+                viewWindow = nullptr;
         }
     }
 
-    DrawFileList();
-    if (viewWindow != nullptr) {
-        viewWindow->DrawWindow();
-        if (!viewWindow->mIsOpen)
-            viewWindow = nullptr;
-    }
-    //for (const auto s : mArchiveFiles) {
-    //    ImGui::Text("%s", s);
-    //}
 
     ImGui::End();
 }
 
 void ExploreWindow::DrawFileList() {
-    ImGui::BeginChild("File List", ImGui::GetWindowSize(), 0, 0);
+    const ImVec2 cursorPos = ImGui::GetCursorPos();
+    const ImVec2 windowSize = ImGui::GetWindowSize();
+    const ImVec2 childWindowSize = {windowSize.x - cursorPos.x, windowSize.y -cursorPos.y};
+    
+    ImGui::BeginChild("File List", childWindowSize, 0, 0);
+    const float windowHeight = ImGui::GetWindowHeight();
     unsigned int i = 0;
-    for (const auto s : mArchiveFiles) {
+    const float textHeight = ImGui::GetTextLineHeight();
+    for (const auto s : mArchive->files) {
+        const float scroll = ImGui::GetScrollY();
+        const float cursorPosY = ImGui::GetCursorPosY();
         char btnId[12];
-        snprintf(btnId, 12, "I%u", i);
-        ImGui::Text("%s", s);
-        ImGui::SameLine();
-        if (ImGui::ArrowButton(btnId, ImGuiDir::ImGuiDir_Left)) {
-            viewWindow = std::make_unique<FileViewerWindow>(zipArchive, s);
+        int width;
+        int height;
+
+        // Only draw elements that are on screen. This gives around 20x performance improvement.
+        if ((cursorPosY < scroll) || (cursorPosY >(scroll + windowHeight))) {
+            ImGui::NewLine();
+            i++;
+            continue;
         }
+
+        ImGui::Text("%s", s);
+        snprintf(btnId, 12, "I%u", i);
+        
+        ImGui::SameLine();
+        ImGui::PushID(btnId);
+        
+        if (ImGui::ImageButton(LoadTextureByName("/tmp/cam.png", &width, &height), ImVec2(32, 32))) {
+            viewWindow = std::make_unique<FileViewerWindow>(mArchive.get(), s);
+        }
+        ImGui::PopID();
         ImGui::SameLine();
         btnId[0] = 'E';
-        if (ImGui::ArrowButton(btnId,ImGuiDir::ImGuiDir_Right)) {
+        ImGui::PushID(btnId);
+        if (ImGui::ImageButton(LoadTextureByName("/tmp/exp.png", &width, &height), ImVec2(32, 32))) {
             char* outPath = nullptr;
             GetSaveFilePath(&outPath);
             SaveFile(outPath, s);
         }
+        ImGui::PopID();
         i++;
     }
     ImGui::EndChild();
@@ -103,21 +137,15 @@ void ExploreWindow::DrawFileList() {
 bool ExploreWindow::OpenArchive() {
     switch (mArchiveType) {
         case ArchiveType::O2R: {
-            int error;
-            zipArchive = zip_open(mPathBuff, ZIP_CHECKCONS | ZIP_RDONLY, &error);
-            if (zipArchive == nullptr) {
-                zip_error_t err;
-                zip_error_init_with_code(&err, error);
-                const char* errStr = zip_error_strerror(&err);
-                size_t errStrLen = strlen(errStr);
-                mArchiveErrStr = std::make_unique<char[]>(errStrLen + 1);
-                strncpy(mArchiveErrStr.get(), errStr, errStrLen);
-                zip_error_fini(&err);
-                return true;
-            }
-            return false;
+            mArchive = std::make_unique<ZipArchive>(mPathBuff);
+            break;
+        }
+        case ArchiveType::OTR: {
+            mArchive = std::make_unique<MpqArchive>(mPathBuff);
+            break;
         }
     }
+    return !mArchive->IsArchiveOpen();
 }
 
 bool ExploreWindow::ValidateInputFile() {
@@ -134,7 +162,7 @@ bool ExploreWindow::ValidateInputFile() {
     CloseHandle(inFile);
 #elif defined(__linux__)
     int fd;
-    fd = open(mPathBuff);
+    fd = open(mPathBuff, O_RDONLY);
     if (read(fd, &header, 4) != 4) {
         return false;
     }
@@ -144,6 +172,9 @@ bool ExploreWindow::ValidateInputFile() {
     if (((char*)&header)[0] == 'P' && ((char*)&header)[1] == 'K' && ((char*)&header)[2] == 3 && ((char*)&header)[3] == 4) {
         rv = true;
         mArchiveType = ArchiveType::O2R;
+    } else if (((char*)&header)[0] == 'M' && ((char*)&header)[1] == 'P' && ((char*)&header)[2] == 'Q' && ((char*)&header)[3] == 0x1A) {
+        rv = true;
+        mArchiveType = ArchiveType::OTR;
     }
     else {
         rv = false;
@@ -152,40 +183,19 @@ bool ExploreWindow::ValidateInputFile() {
 }
 
 void ExploreWindow::SaveFile(char* outPath, const char* archiveFilePath) {
-    zip_file_t* zipFile = zip_fopen(zipArchive, archiveFilePath, 0);
+    size_t uncompressedSize;
+    void* data = mArchive->ReadFile(outPath, &uncompressedSize);
 
-    zip_stat_t stat;
-    zip_stat_init(&stat);
-    zip_stat(zipArchive, archiveFilePath, 0, &stat);
-
-    // Using malloc because new and delete doesn't like void*
-    void* mData = malloc(stat.size);
-    if (mData == nullptr) {
-        return;
-    }
-
-    zip_fread(zipFile, mData, stat.size);
     FILE* outFile = fopen(outPath, "wb+");
-    fwrite(mData, stat.size, 1, outFile);
+
+    fwrite(data, uncompressedSize, 1, outFile);
     fclose(outFile);
-    free(mData);
-    zip_fclose(zipFile);
+    free(data);
+
 }
 
-FileViewerWindow::FileViewerWindow(zip_t* archive, const char* path) {
-    zip_file_t* zipFile = zip_fopen(archive, path, 0);
-    
-    zip_stat_t stat;
-    zip_stat_init(&stat);
-    zip_stat(archive, path, 0, &stat);
-    
-    mSize = stat.size;
-    // Using malloc because new and delete doesn't like void*
-    mData = malloc(mSize);
-    
-    zip_fread(zipFile, mData, mSize);
-    zip_fclose(zipFile);
-    
+FileViewerWindow::FileViewerWindow(Archive* archive, const char* path) {
+    mData = archive->ReadFile(path, &mSize);
     mEditor = std::make_unique<MemoryEditor>();
 }
 

@@ -5,6 +5,8 @@
 #include <memory>
 #include <vector>
 #include "zip.h"
+#include "StormLib.h"
+#include "archive.h"
 
 enum class ArchiveType : uint8_t {
     Unchecked,
@@ -28,7 +30,11 @@ private:
     std::vector<const char*> mArchiveFiles;
     std::unique_ptr<char[]> mArchiveErrStr;
     char* mPathBuff;
-    zip_t* zipArchive = nullptr;
+    std::unique_ptr<Archive> mArchive;
+    //union {
+    //    zip_t* zipArchive = nullptr;
+    //    HANDLE mpqArchive;
+    //} mArchive;
     std::unique_ptr<FileViewerWindow> viewWindow;
 
     bool mFileValidated = false;
@@ -41,13 +47,13 @@ class MemoryEditor;
 
 class FileViewerWindow {
 public:
-    FileViewerWindow(zip_t* archive, const char* path);
+    FileViewerWindow(Archive* archive, const char* path);
     ~FileViewerWindow();
     void DrawWindow();
     bool mIsOpen = true;
 private:
     void* mData;
-    zip_int64_t mSize;
+    size_t mSize;
     std::unique_ptr<MemoryEditor> mEditor;
 
 };
