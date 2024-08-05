@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.24.0)
 project(future)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 set(IMGUI_DIR extern/imgui)
 include_directories(${IMGUI_DIR})
@@ -85,6 +85,20 @@ endif()
 
 add_executable(future ${ALL_FILES})
 #target_link_libraries(future ${LIBS})
+
+
+include(FetchContent)
+FetchContent_Declare(
+    StormLib
+    GIT_REPOSITORY https://github.com/ladislav-zezula/StormLib.git
+    GIT_TAG v9.25
+    PATCH_COMMAND ${stormlib_apply_path_if_needed}
+)
+FetchContent_MakeAvailable(StormLib)
+list(APPEND ADDITIONAL_LIB_INCLUDES extern/StormLib/src)
+include_directories(future, extern/StormLib/src)
+target_link_libraries(future PUBLIC storm)
+
 
 find_package(libzip REQUIRED)
 target_link_libraries(future PRIVATE libzip::zip)
