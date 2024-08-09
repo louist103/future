@@ -1,5 +1,5 @@
 #if defined (_WIN32)
-// TODO
+#include <D3d11.h>
 #elif defined(__linux__)
 #include <fcntl.h>
 #include <unistd.h>
@@ -15,7 +15,42 @@
 
 static std::unordered_map<std::string, void*> sImageCache;
 
+#if defined(_WIN32)
+static inline ID3D11ShaderResourceView* LoadTextureDX11(void* data, int width, int height) {
+    // Create texture
+    extern ID3D11Device* g_pd3dDevice;
+    D3D11_TEXTURE2D_DESC desc;
+    ID3D11ShaderResourceView* view;
+    ZeroMemory(&desc, sizeof(desc));
+    desc.Width = width;
+    desc.Height = height;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    desc.CPUAccessFlags = 0;
 
+    ID3D11Texture2D* pTexture = NULL;
+    D3D11_SUBRESOURCE_DATA subResource;
+    subResource.pSysMem = data;
+    subResource.SysMemPitch = desc.Width * 4;
+    subResource.SysMemSlicePitch = 0;
+    g_pd3dDevice->CreateTexture2D(&desc, &subResource, &pTexture);
+
+    // Create texture view
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+    ZeroMemory(&srvDesc, sizeof(srvDesc));
+    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = desc.MipLevels;
+    srvDesc.Texture2D.MostDetailedMip = 0;
+    g_pd3dDevice->CreateShaderResourceView(pTexture, &srvDesc, &view);
+    pTexture->Release();
+    return view;
+}
+#elif defined(__linux__)
 static inline GLuint LoadTextureGL(void* data, int width, int height) {
     GLuint image_texture;
     glGenTextures(1, &image_texture);
@@ -35,6 +70,7 @@ static inline GLuint LoadTextureGL(void* data, int width, int height) {
     
     return image_texture;
 }
+#endif
 
 void* LoadTextureByName(const char* path, int* width, int* height) {
     if (sImageCache.contains(path)) {
@@ -42,7 +78,24 @@ void* LoadTextureByName(const char* path, int* width, int* height) {
     }
     void* imageData;
     off_t fileSize;
-    #if defined(__WIN32)
+    #if defined(_WIN32)
+    HANDLE hFile = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hFile == nullptr) {
+        return nullptr;
+    }
+    LARGE_INTEGER sizeW;
+    GetFileSizeEx(hFile, &sizeW);
+    fileSize = sizeW.QuadPart;
+    HANDLE mappingObj = CreateFileMappingA(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
+    if (mappingObj == nullptr) {
+        CloseHandle(hFile);
+        return nullptr;
+    }
+    imageData = MapViewOfFile(mappingObj, FILE_MAP_READ, 0, 0, 0);
+    
+    stbi_uc* image = stbi_load_from_memory((stbi_uc*)imageData, (int)fileSize, width, height, nullptr, 4);
+    void* texId = (void*)(uintptr_t)LoadTextureDX11(image, *width, *height);
+    
     #elif defined(__linux__)
     int fd;
     fd = open(path, O_RDONLY);
