@@ -115,14 +115,14 @@ void ExploreWindow::DrawFileList() {
         ImGui::SameLine();
         ImGui::PushID(btnId);
         
-        if (ImGui::ImageButton(LoadTextureByName("/tmp/cam.png", &width, &height), ImVec2(32, 32))) {
+        if (ImGui::ImageButton(LoadTextureByName("R:\\MagBlack.png", &width, &height), ImVec2(32, 32))) {
             viewWindow = std::make_unique<FileViewerWindow>(mArchive.get(), s);
         }
         ImGui::PopID();
         ImGui::SameLine();
         btnId[0] = 'E';
         ImGui::PushID(btnId);
-        if (ImGui::ImageButton(LoadTextureByName("/tmp/exp.png", &width, &height), ImVec2(32, 32))) {
+        if (ImGui::ImageButton(LoadTextureByName("R:\\Export.png", &width, &height), ImVec2(32, 32))) {
             char* outPath = nullptr;
             GetSaveFilePath(&outPath);
             SaveFile(outPath, s);

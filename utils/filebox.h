@@ -14,7 +14,7 @@ enum class FileBoxType {
 #define IDNO 7
 #endif
 
-
+bool GetOpenDirPath(char** inputBuffer);
 bool GetOpenFilePath(char** inputBuffer, FileBoxType type);
 bool GetSaveFilePath(char** inputBuffer);
 int ShowYesNoBox(const char* title, const char* box);

@@ -1,4 +1,8 @@
 #include "WindowMgr.h"
+#include "MainWindow.h"
+#include "ExploreArchive.h"
+#include "CreateArchive.h"
+#include "CreateFromDir.h"
 
 WindowId WindowMgr::GetCurWindow(){
     return mCurWindowId;
@@ -22,6 +26,12 @@ void WindowMgr::ProcessWindowChange()
                 break;
             case WindowId::Explore:
                 mCurWindow = std::make_unique<ExploreWindow>();
+                break;
+            case WindowId::Create:
+                mCurWindow = std::make_unique<CreateArchiveWindow>();
+                break;
+            case WindowId::FromDir:
+                mCurWindow = std::make_unique<CreateFromDirWindow>();
                 break;
         }
     }

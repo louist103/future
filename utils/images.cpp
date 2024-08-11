@@ -95,7 +95,11 @@ void* LoadTextureByName(const char* path, int* width, int* height) {
     
     stbi_uc* image = stbi_load_from_memory((stbi_uc*)imageData, (int)fileSize, width, height, nullptr, 4);
     void* texId = (void*)(uintptr_t)LoadTextureDX11(image, *width, *height);
-    
+
+    UnmapViewOfFile(imageData);
+    CloseHandle(mappingObj);
+    CloseHandle(hFile);
+
     #elif defined(__linux__)
     int fd;
     fd = open(path, O_RDONLY);
@@ -110,8 +114,8 @@ void* LoadTextureByName(const char* path, int* width, int* height) {
     stbi_uc* image = stbi_load_from_memory((stbi_uc*)imageData, (int)fileSize, width, height, nullptr, 4);
     void* texId = (void*)(uintptr_t)LoadTextureGL(image, *width, *height);
     munmap(imageData, fileSize);
-    stbi_image_free(image);
     #endif
+    stbi_image_free(image);
     sImageCache[path] = texId;
     
     return texId;

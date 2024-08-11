@@ -20,11 +20,14 @@ void MainWindow::DrawWindow() {
 
     ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 50.0f);
-    ImGui::Button("Create OTR/O2R", { windowSizeSq.x * .33f, windowSizeSq.y * .33f });
+    if (ImGui::Button("Create OTR/O2R", { windowSizeSq.x * .33f, windowSizeSq.y * .33f })) {
+        gWindowMgr.SetCurWindow(WindowId::Create);
+    }
     ImGui::SameLine();
     if (ImGui::Button("Inspect OTR/O2R", { windowSizeSq.x * .33f, windowSizeSq.y * .33f })) {
         gWindowMgr.SetCurWindow(WindowId::Explore);
     }
+
     ImGui::SameLine();
     ImGui::Button("Debug", { windowSizeSq.x * .33f, windowSizeSq.y * .33f });
 

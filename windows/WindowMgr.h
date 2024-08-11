@@ -4,13 +4,14 @@
 #include <array>
 #include <memory>
 #include "WindowBase.h"
-#include "MainWindow.h"
-#include "ExploreArchive.h"
 
 enum class WindowId {
     Main,
     Explore,
     Create,
+    TexReplace,
+    CustomAudio,
+    FromDir,
     Max,
 };
 

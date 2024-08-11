@@ -19,7 +19,6 @@
 
 // Forward declarations of helper functions
 
-void ResetDevice();
 int InitState();
 bool HandleEvents();
 void StartFrame();
@@ -96,7 +95,7 @@ int main(int, char**)
 
 // Helper functions
 
-int InitState() {
+static int InitState() {
 #if defined(__linux__)
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
         printf("Error: %s\n", SDL_GetError());
@@ -180,7 +179,7 @@ int InitState() {
     return 0;
 }
 
-void StartFrame() {
+static void StartFrame() {
 #if defined(_WIN32)
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
@@ -191,7 +190,7 @@ void StartFrame() {
     ImGui::NewFrame();
 }
 
-bool HandleEvents() {
+static bool HandleEvents() {
     bool rv = false;
 #if defined(_WIN32)
     MSG msg;
@@ -215,7 +214,7 @@ bool HandleEvents() {
 return rv;
 }
 
-void Render(const ImVec4& clear_color) {
+static void Render(const ImVec4& clear_color) {
 #if defined(_WIN32)
     ImGui::Render();
     const float clear_color_with_alpha[4] = { clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w };
@@ -239,7 +238,7 @@ void Render(const ImVec4& clear_color) {
 }
 
 
-void Shutdown() {
+static void Shutdown() {
 #if defined(_WIN32)
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
@@ -260,7 +259,7 @@ void Shutdown() {
 }
 
 #if defined(_WIN32)
-void CreateRenderTarget()
+static void CreateRenderTarget()
 {
     ID3D11Texture2D* pBackBuffer;
     g_pSwapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));
@@ -268,7 +267,7 @@ void CreateRenderTarget()
     pBackBuffer->Release();
 }
 
-bool CreateDeviceD3D(HWND hWnd) {
+static bool CreateDeviceD3D(HWND hWnd) {
     DXGI_SWAP_CHAIN_DESC sd;
     ZeroMemory(&sd, sizeof(sd));
     sd.BufferCount = 2;
@@ -299,12 +298,12 @@ bool CreateDeviceD3D(HWND hWnd) {
     return true;
 }
 
-void CleanupRenderTarget()
+static void CleanupRenderTarget()
 {
     if (g_mainRenderTargetView) { g_mainRenderTargetView->Release(); g_mainRenderTargetView = nullptr; }
 }
 
-void CleanupDeviceD3D()
+static void CleanupDeviceD3D()
 {
     CleanupRenderTarget();
     if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = nullptr; }
@@ -320,7 +319,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
 // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
 // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
         return true;
