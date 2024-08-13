@@ -25,6 +25,7 @@ public:
 
     size_t GetFileSize(const char* path) const override;
     void GenFileList() override;
+    void CreateArchiveFromList(std::queue<std::unique_ptr<char[]>>& list) override;
 private:
     zip_t* mArchive = nullptr;
 

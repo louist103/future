@@ -20,7 +20,7 @@ ZipArchive::~ZipArchive()
 
 bool ZipArchive::OpenArchive(const char *path) {
     int error;
-    mArchive = zip_open(path, ZIP_CHECKCONS, &error);
+    mArchive = zip_open(path, ZIP_CHECKCONS | ZIP_CREATE, &error);
     if (mArchive == nullptr) {
         zip_error_t err;
             
@@ -111,4 +111,14 @@ void ZipArchive::GenFileList() {
             files.push_back(zip_get_name(mArchive, i, ZIP_FL_ENC_GUESS));
         }
     }
+}
+
+void ZipArchive::CreateArchiveFromList(std::queue<std::unique_ptr<char[]>>& list) {
+    while (!list.empty()) {
+        zip_source_t* source = zip_source_file(mArchive, list.front().get(), 0, ZIP_LENGTH_TO_END);
+
+        zip_file_add(mArchive, list.front().get(), source, ZIP_FL_OVERWRITE | ZIP_FL_ENC_UTF_8);
+        list.pop();
+    }
+    zip_close(mArchive);
 }

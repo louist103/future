@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <vector>
 #include <cstdlib>
+#include <queue>
+#include <memory>
 
 class Archive {
     public:
@@ -20,6 +22,8 @@ class Archive {
     //virtual void ReadFile(const char* filePath, void** outBuffer);
     virtual size_t GetFileSize(const char* path) const = 0;
     virtual void GenFileList() = 0;
+
+    virtual void CreateArchiveFromList(std::queue<std::unique_ptr<char[]>>& list) = 0;
     // ZIP will keep the file names valid until the archive is closed so we don't need to free them.
     // MPQ will not so we need to allocate and free the strings.
     std::vector<const char*> files;

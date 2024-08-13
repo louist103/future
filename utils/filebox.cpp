@@ -39,7 +39,7 @@ bool GetOpenDirPath(char** inputBuffer) {
         *inputBuffer = new char[len + 1];
         wcstombs(*inputBuffer, path, len);
         // wcstombs doesn't null terminate the string for some reason...
-        (*inputBuffer)[len] = 0;
+        (*inputBuffer)[len ] = 0;
         CoTaskMemFree(path);
         result->Release();
     }

@@ -91,3 +91,7 @@ void MpqArchive::GenFileList() {
     }
     SListFileFindClose(file);
 }
+
+void MpqArchive::CreateArchiveFromList(std::queue<std::unique_ptr<char[]>>& list)
+{
+}
