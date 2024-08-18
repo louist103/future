@@ -5,6 +5,7 @@
 #include "stdlib.h"
 #include "zip.h"
 
+
 class ZipArchive : public Archive {
 public:
     ZipArchive();
@@ -25,7 +26,8 @@ public:
 
     size_t GetFileSize(const char* path) const override;
     void GenFileList() override;
-    void CreateArchiveFromList(std::queue<std::unique_ptr<char[]>>& list) override;
+    void CreateArchiveFromList(std::vector<char*>& list, char* basePath) override;
+    void RegisterProgressCallback(void* cb, void* callingClass);
 private:
     zip_t* mArchive = nullptr;
 

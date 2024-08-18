@@ -107,18 +107,25 @@ void ZipArchive::GenFileList() {
     size_t numFiles = GetNumFiles();
     if (numFiles != 0) {
         files.reserve(numFiles);
-        for (zip_int64_t i = 0; i < numFiles; i++) {
+        for (zip_uint64_t i = 0; i < numFiles; i++) {
             files.push_back(zip_get_name(mArchive, i, ZIP_FL_ENC_GUESS));
         }
     }
 }
 
-void ZipArchive::CreateArchiveFromList(std::queue<std::unique_ptr<char[]>>& list) {
+void ZipArchive::CreateArchiveFromList(std::vector<char*>& list, char* pathBase) {
+    size_t baseStrEnd = strlen(pathBase);
     while (!list.empty()) {
-        zip_source_t* source = zip_source_file(mArchive, list.front().get(), 0, ZIP_LENGTH_TO_END);
+        zip_error_t err;
+        zip_source_t* source = zip_source_file_create(list.back(), 0, ZIP_LENGTH_TO_END, &err);
 
-        zip_file_add(mArchive, list.front().get(), source, ZIP_FL_OVERWRITE | ZIP_FL_ENC_UTF_8);
-        list.pop();
+        char* newPath = &list.back()[baseStrEnd + 1];
+        zip_int64_t rv = zip_file_add(mArchive, newPath, source, ZIP_FL_OVERWRITE | ZIP_FL_ENC_UTF_8);
+        delete[] list.back();
+        list.pop_back();
     }
-    zip_close(mArchive);
+}
+
+void ZipArchive::RegisterProgressCallback(void* cb, void* callingClass) {
+    zip_register_progress_callback_with_state(mArchive, 0.01, (zip_progress_callback)cb, nullptr, callingClass);
 }

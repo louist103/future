@@ -1,4 +1,5 @@
 #include "mpq_archive.h"
+#include "filebox.h"
 #include <string.h>
 
 MpqArchive::MpqArchive() {
@@ -21,7 +22,12 @@ MpqArchive::~MpqArchive()
 }
 
 bool MpqArchive::OpenArchive(const char *path) {
-    SFileOpenArchive(path, 0, MPQ_OPEN_READ_ONLY, &mArchive);
+    if (!SFileCreateArchive(path, 0, MPQ_OPEN_READ_ONLY, &mArchive)) {
+        DWORD err = GetLastError();
+        if (err == ERROR_FILE_EXISTS) {
+            SFileOpenArchive(path, 0, 0, &mArchive);
+        }
+    }
     return false;
 }
 
@@ -58,7 +64,7 @@ void* MpqArchive::ReadFile(const char *filePath, size_t* bytesRead) {
     bool res1 = SFileOpenFileEx(mArchive, filePath, 0, &mpqFile);
     size_t fileSize = GetFileSize(mpqFile);
     void* data = malloc(fileSize);
-    bool res = SFileReadFile(mpqFile, data, fileSize, (DWORD*)&bytesRead1, nullptr);
+    bool res = SFileReadFile(mpqFile, data, (DWORD)fileSize, (DWORD*)&bytesRead1, nullptr);
     SFileCloseFile(mpqFile);
     *bytesRead = bytesRead1;
     return data;
@@ -85,13 +91,21 @@ void MpqArchive::GenFileList() {
     HANDLE file = SListFileFindFirstFile(mArchive, nullptr, "*", &data);
     files.reserve(size);
 
-    files.push_back(strdup(data.cFileName));
+    files.push_back(_strdup(data.cFileName));
     while (SListFileFindNextFile(file, &data)) {
-        files.push_back(strdup(data.cFileName));
+        files.push_back(_strdup(data.cFileName));
     }
     SListFileFindClose(file);
 }
 
-void MpqArchive::CreateArchiveFromList(std::queue<std::unique_ptr<char[]>>& list)
-{
+void MpqArchive::CreateArchiveFromList(std::vector<char*>& list, char* pathBase) {
+    size_t baseStrEnd = strlen(pathBase);
+    while (!list.empty()) {
+        char* newPath = &list.back()[baseStrEnd + 1];
+
+        SFileAddFileEx(mArchive, list.back(), newPath, 0, 0, 0);
+
+        delete[] list.back();
+        list.pop_back();
+    }
 }

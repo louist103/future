@@ -2,8 +2,9 @@
 #define CREATE_FROM_DIR_H
 
 #include "WindowBase.h"
-#include <queue>
+#include <vector>
 #include <memory>
+#include <thread>
 
 class CreateFromDirWindow : public WindowBase {
 public:
@@ -11,9 +12,19 @@ public:
     ~CreateFromDirWindow();
     void DrawWindow() override;
     void FillFileQueue();
+
+    std::vector<char*> mFileQueue;
+    std::thread mAddFileThread;
+    char* mPathBuff = nullptr;
+    char* mSavePath = nullptr;
+    double mProgress = 0.0;
+    bool mThreadIsDone = false;
+    bool mThreadStarted = false;
+    int mRadioState = 0;
 private:
-    std::queue<std::unique_ptr<char[]>> fileQueue;
-    char* mPathBuff;
+    void DrawPendingFilesList();
+    void ClearPathBuff();
+    void ClearSaveBuff();
 };
 
 #endif

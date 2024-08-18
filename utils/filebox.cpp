@@ -10,6 +10,7 @@ extern HWND gHwnd;
 #include "SDL2/SDL.h"
 #endif
 #include <cstring>
+#include <filesystem>
 
 
 bool GetOpenDirPath(char** inputBuffer) {
@@ -188,3 +189,6 @@ void ShowErrorBox(const char* title, const char* text) {
 #endif
 }
 
+size_t GetDiskFileSize(char* path) {
+    return std::filesystem::file_size(path);
+}

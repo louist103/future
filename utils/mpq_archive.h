@@ -24,7 +24,8 @@ public:
 
     size_t GetFileSize(const char* path) const override;
     void GenFileList() override;
-    void CreateArchiveFromList(std::queue<std::unique_ptr<char[]>>& list) override;
+    void CreateArchiveFromList(std::vector<char*>& list, char* basePath) override;
+    
 private:
     size_t GetFileSize(HANDLE fileHandle) const;
     HANDLE mArchive = nullptr;

@@ -19,6 +19,7 @@ bool GetOpenFilePath(char** inputBuffer, FileBoxType type);
 bool GetSaveFilePath(char** inputBuffer);
 int ShowYesNoBox(const char* title, const char* box);
 void ShowErrorBox(const char* title, const char* text);
+size_t GetDiskFileSize(char* path);
 
 #ifdef _WIN32
 #endif
