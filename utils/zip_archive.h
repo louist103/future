@@ -27,7 +27,7 @@ public:
     size_t GetFileSize(const char* path) const override;
     void GenFileList() override;
     void CreateArchiveFromList(std::vector<char*>& list, char* basePath) override;
-    void RegisterProgressCallback(void* cb, void* callingClass);
+    void RegisterProgressCallback(zip_progress_callback cb, void* callingClass);
 private:
     zip_t* mArchive = nullptr;
 

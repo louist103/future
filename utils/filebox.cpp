@@ -1,16 +1,18 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include "filebox.h"
-#include <stdlib.h>
+#include <cstdlib>
 #if defined(_WIN32)
 #include <Windows.h>
 #include <shobjidl_core.h>
+#include <filesystem>
 extern HWND gHwnd;
 #elif defined(__linux__)
 #include "portable-file-dialogs.h"
 #include "SDL2/SDL.h"
+#include <sys/stat.h>
 #endif
 #include <cstring>
-#include <filesystem>
+
 
 
 bool GetOpenDirPath(char** inputBuffer) {
@@ -45,6 +47,18 @@ bool GetOpenDirPath(char** inputBuffer) {
         result->Release();
     }
     pfd->Release();
+#elif defined (__linux__)
+    auto selection = pfd::select_folder("Open Directory").result();
+
+    if (selection.empty()) {
+        return false;
+    }
+    if (*inputBuffer != nullptr) {
+            delete[] *inputBuffer;
+    }
+    size_t len = selection.length();
+    *inputBuffer = new char[len + 1];
+    strcpy(*inputBuffer, selection.c_str());
 #endif
     return true;
 }
@@ -190,5 +204,13 @@ void ShowErrorBox(const char* title, const char* text) {
 }
 
 size_t GetDiskFileSize(char* path) {
+    // The std::fs function is faster on Windows but not linux.
+#if defined (_WIN32)
     return std::filesystem::file_size(path);
+#elif defined(__linux__)
+    struct stat st;
+    stat(path, &st);
+    return (size_t)st.st_size;
+#endif
+
 }

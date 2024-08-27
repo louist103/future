@@ -19,11 +19,11 @@
 
 // Forward declarations of helper functions
 
-int InitState();
-bool HandleEvents();
-void StartFrame();
-void Render(const ImVec4& clear_color);
-void Shutdown();
+static int InitState();
+static bool HandleEvents();
+static void StartFrame();
+static void Render(const ImVec4& clear_color);
+static void Shutdown();
 #if defined(_WIN32)
 bool CreateDeviceD3D(HWND hWnd);
 void CleanupDeviceD3D();
@@ -39,8 +39,8 @@ static ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
 static WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"Future", nullptr };
 HWND gHwnd;
 #elif __linux__
-SDL_Window* window;
-SDL_GLContext gl_context;
+static SDL_Window* window;
+static SDL_GLContext gl_context;
 #endif
 WindowMgr gWindowMgr;
 
@@ -64,7 +64,7 @@ int main(int, char**)
     bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-    //io.Fonts->AddFontFromFileTTF("Roboto-Medium.ttf", 32.0f);
+    io.Fonts->AddFontFromFileTTF("Roboto-Medium.ttf", 32.0f);
 
     gWindowMgr.SetCurWindow(WindowId::Main);
     gWindowMgr.ProcessWindowChange();

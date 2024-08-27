@@ -117,7 +117,9 @@ void ZipArchive::CreateArchiveFromList(std::vector<char*>& list, char* pathBase)
     size_t baseStrEnd = strlen(pathBase);
     while (!list.empty()) {
         zip_error_t err;
-        zip_source_t* source = zip_source_file_create(list.back(), 0, ZIP_LENGTH_TO_END, &err);
+        // ZIP_LENGTH_TO_END does exists as of 1.10 but some linux distros don't support it yet
+        size_t fileSize = GetDiskFileSize(list.back());
+        zip_source_t* source = zip_source_file_create(list.back(), 0, fileSize, &err);
 
         char* newPath = &list.back()[baseStrEnd + 1];
         zip_int64_t rv = zip_file_add(mArchive, newPath, source, ZIP_FL_OVERWRITE | ZIP_FL_ENC_UTF_8);
@@ -126,6 +128,6 @@ void ZipArchive::CreateArchiveFromList(std::vector<char*>& list, char* pathBase)
     }
 }
 
-void ZipArchive::RegisterProgressCallback(void* cb, void* callingClass) {
-    zip_register_progress_callback_with_state(mArchive, 0.01, (zip_progress_callback)cb, nullptr, callingClass);
+void ZipArchive::RegisterProgressCallback(zip_progress_callback cb, void* callingClass) {
+    zip_register_progress_callback_with_state(mArchive, 0.01, cb, nullptr, callingClass);
 }

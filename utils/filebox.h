@@ -1,6 +1,8 @@
 #ifndef FILEBOX_H
 #define FILEBOX_H
 
+#include <cstddef>
+
 enum class FileBoxType {
 	Archive,
 	Max,

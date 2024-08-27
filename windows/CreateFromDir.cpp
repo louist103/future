@@ -2,12 +2,16 @@
 #include "imgui.h"
 #include "WindowMgr.h"
 #include "filebox.h"
-#include <Windows.h>
-#include <Shlwapi.h>
 #include "zip_archive.h"
 #include "mpq_archive.h"
-
+#include <string.h>
+#if defined(_WIN32)
+#include <Windows.h>
+#include <Shlwapi.h>
 #pragma comment (lib, "shlwapi.lib")
+#elif defined (__linux__)
+#include <filesystem>
+#endif
 
 CreateFromDirWindow::CreateFromDirWindow()
 {
@@ -17,6 +21,9 @@ CreateFromDirWindow::~CreateFromDirWindow()
 {
     ClearPathBuff();
     ClearSaveBuff();
+    for (auto p : mFileQueue) {
+        delete p;
+    }
 }
 
 void CreateFromDirWindow::ClearPathBuff()
@@ -159,14 +166,22 @@ void CreateFromDirWindow::DrawPendingFilesList() {
     ImGui::EndChild();
 }
 
-static void FillFileQueueImpl(std::vector<char*>& files, char* startPath);
+static void FillFileQueueImpl(std::vector<char*>& files, char* startPath, int);
 
 void CreateFromDirWindow::FillFileQueue()
 {
-    FillFileQueueImpl(mFileQueue, mPathBuff);
+    FillFileQueueImpl(mFileQueue, mPathBuff, 0);
 }
 
-static void FillFileQueueImpl(std::vector<char*>& files, char* startPath) {
+static void FillFileQueueImpl(std::vector<char*>& files, char* startPath, int newPathLen) {
+    std::filesystem::recursive_directory_iterator it(startPath);
+    for (const auto& i : it) {
+        if (!i.is_directory()) {
+            files.push_back(strdup(i.path().string().c_str()));
+        }
+    }
+#if 0 // vv This doesn't work... I give up for now...
+#if defined (_WIN32)
     WIN32_FIND_DATAA ffd;
     char buffer[MAX_PATH];
     strncpy_s(buffer, startPath, MAX_PATH);
@@ -196,4 +211,53 @@ static void FillFileQueueImpl(std::vector<char*>& files, char* startPath) {
         }
     } while (FindNextFileA(h, &ffd) != 0);
     FindClose(h);
+#elif defined(__linux__)
+    //I give up...
+    size_t basePathLen = strlen(startPath);
+    char buffer[PATH_MAX];
+    strncpy(buffer, startPath, PATH_MAX);
+    strncat(buffer, "/", PATH_MAX - 1);
+    DIR* d = opendir(startPath);
+
+    struct dirent* dir;
+
+    if (d != nullptr) {
+        while((dir = readdir(d)) != nullptr) {
+            if ((dir->d_name[0] == '.' && dir->d_name[1] == 0) || (dir->d_name[0] == '.' && dir->d_name[1] == '.')) {
+                    continue;
+            } 
+            char innerPath[PATH_MAX];
+            struct stat path;
+            strncpy(innerPath, buffer, PATH_MAX);
+            strncat(innerPath, dir->d_name, PATH_MAX);
+            int ret = stat(innerPath, &path);
+            if (S_ISDIR(path.st_mode)) {
+                    //char innerPath[PATH_MAX];
+                    size_t len = strlen(innerPath);
+                    size_t len2 = strlen(dir->d_name);
+                    //strncpy(innerPath, buffer, PATH_MAX);
+                    //innerPath[len] = '/';
+                    //strncat(innerPath, dir->d_name, PATH_MAX - (len + len2));
+                    //innerPath[len+len2 + 1] = '/';
+                    //innerPath[len+len2 + 2] = 0;
+                    FillFileQueueImpl(files, innerPath, len2);
+                
+            } else {
+                size_t len = strlen(innerPath);
+                char* path = new char[len + 2];
+                strncpy(path, innerPath, PATH_MAX);
+                //strncat(path, dir->d_name, PATH_MAX - (len + len2));
+                files.push_back(path);
+                // Clear out the last file name but leave the folder path.
+                // We could make another buffer and copy everything but the file
+                // But we can't afford the stack space.
+                innerPath[len + 1] = 0;
+            }
+        }
+    }
+    // Same as above but this time clear out everything before the base path
+    //buffer[basePathLen - newPathLen] = 0;
+    closedir(d);
+#endif
+#endif
 }
