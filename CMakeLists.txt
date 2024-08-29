@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(IMGUI_DIR extern/imgui)
 include_directories(${IMGUI_DIR})
 include_directories(${IMGUI_DIR}/backends)
+include_directories(extern/dr_libs)
 
 file (GLOB future__imgui
     extern/imgui/imgui.cpp
@@ -101,11 +102,17 @@ target_link_libraries(future PUBLIC storm)
 
 
 find_package(libzip REQUIRED)
-target_link_libraries(future PRIVATE libzip::zip)
+target_link_libraries(future PRIVATE libzip::zip )
+
+target_compile_options(future PRIVATE -Wall -Wextra)
+
+file (COPY assets/ DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/assets)
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
 find_package(SDL2 REQUIRED)
 target_link_libraries(future PRIVATE SDL2::SDL2)
 find_package(OpenGL)
 target_link_libraries(future PRIVATE OpenGL::GL)
+find_package(tinyxml2)
+target_link_libraries(future PRIVATE tinyxml2::tinyxml2)
 endif()
