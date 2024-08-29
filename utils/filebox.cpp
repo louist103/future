@@ -54,11 +54,13 @@ bool GetOpenDirPath(char** inputBuffer) {
         return false;
     }
     if (*inputBuffer != nullptr) {
-            delete[] *inputBuffer;
+        delete[] *inputBuffer;
     }
     size_t len = selection.length();
-    *inputBuffer = new char[len + 1];
+    *inputBuffer = new char[len + 2];
     strcpy(*inputBuffer, selection.c_str());
+    (*inputBuffer)[len] = '/';
+    (*inputBuffer)[len + 1] = 0;
 #endif
     return true;
 }
