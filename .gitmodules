@@ -1,3 +1,6 @@
 [submodule "extern/StormLib"]
 	path = extern/StormLib
 	url = https://github.com/ladislav-zezula/StormLib
+[submodule "extern/dr_libs"]
+	path = extern/dr_libs
+	url = https://github.com/mackron/dr_libs.git
