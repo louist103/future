@@ -11,6 +11,8 @@ enum class WindowId {
     Create,
     TexReplace,
     CustomAudio,
+    CustomStreamedAudio,
+    CustomSequencedAudio,
     FromDir,
     Max,
 };

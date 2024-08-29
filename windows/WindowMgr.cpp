@@ -3,6 +3,9 @@
 #include "ExploreArchive.h"
 #include "CreateArchive.h"
 #include "CreateFromDir.h"
+#include "CustomAudio.h"
+#include "CustomStreamedAudio.h"
+#include "CustomSequencedAudio.h"
 
 WindowId WindowMgr::GetCurWindow(){
     return mCurWindowId;
@@ -32,6 +35,15 @@ void WindowMgr::ProcessWindowChange()
                 break;
             case WindowId::FromDir:
                 mCurWindow = std::make_unique<CreateFromDirWindow>();
+                break;
+            case WindowId::CustomAudio:
+                mCurWindow = std::make_unique<CustomAudioWindow>();
+                break;
+            case WindowId::CustomStreamedAudio:
+                mCurWindow = std::make_unique<CustomStreamedAudioWindow>();
+                break;
+            case WindowId::CustomSequencedAudio:
+                mCurWindow = std::make_unique<CustomSequencedAudioWindow>();
                 break;
         }
     }
