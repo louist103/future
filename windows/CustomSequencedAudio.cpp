@@ -95,17 +95,25 @@ static std::unique_ptr<char[]> CopySampleData(char* input, char* fileName) {
     return sampleDataPath;
 }
 
-static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numFrames) {
+static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numFrames, uint64_t numChannels) {
     constexpr static const char sampleXmlBase[] = "custom/samples/";
+    constexpr static const char sampleDataBase[] = "custom/sampleData/";
+
     tinyxml2::XMLDocument sampleBaseRoot;
     tinyxml2::XMLError e = sampleBaseRoot.LoadFile("assets/sample-base.xml");
     assert(e == 0);
     
+    size_t sampleDataSize = sizeof(sampleDataBase) + strlen(fileName) + 1;
+    auto sampleDataPath = std::make_unique<char[]>(sampleDataSize);
+    snprintf(sampleDataPath.get(), sampleDataSize, "%s%s", sampleDataBase, fileName);
+
     // Fill in sample XML
     tinyxml2::XMLPrinter p;
     tinyxml2::XMLElement* root = sampleBaseRoot.RootElement();
-    root->SetAttribute("LoopEnd", numFrames);
+    root->SetAttribute("LoopEnd", numFrames * 2);
     root->SetAttribute("CustomFormat", audioType);
+    root->SetAttribute("SampleSize", numFrames * numChannels * 2);
+    root->SetAttribute("SamplePath", sampleDataPath.get());
     size_t samplePathLen = sizeof(sampleXmlBase) + strlen(fileName) + sizeof("_SAMPLE.xml") + 1;
     std::unique_ptr<char[]> sampleXmlPath = std::make_unique<char[]>(samplePathLen);
     snprintf(sampleXmlPath.get(), samplePathLen, "%s%s_SAMPLE.xml", sampleXmlBase, fileName);
@@ -146,6 +154,7 @@ static void CreateSequenceXml(char* fileName, char* fontPath) {
 
 static std::unique_ptr<char[]> CreateFontXml(char* fileName, char* samplePath, uint64_t sampleRate, uint64_t channels) {
     constexpr static const char fontXmlBase[] = "custom/fonts/";
+    constexpr static const char sampleNameBase[] = "custom/samples/";
     tinyxml2::XMLDocument fontBaseRoot;
     tinyxml2::XMLError e = fontBaseRoot.LoadFile("assets/font-base.xml");
     assert(e == 0);
@@ -155,7 +164,12 @@ static std::unique_ptr<char[]> CreateFontXml(char* fileName, char* samplePath, u
     tinyxml2::XMLElement* instrumentsElement = root->FirstChildElement("Instruments");
     tinyxml2::XMLElement* instrumentElement = instrumentsElement->FirstChildElement("Instrument");
     tinyxml2::XMLElement* normalNoteElement = instrumentElement->FirstChildElement("NormalNotesSound");
-    normalNoteElement->SetAttribute("SampleRef", samplePath);
+    
+    size_t sampleRefPathSize = sizeof(sampleNameBase) + strlen(fileName) + sizeof("_SAMPLE.xml") + 1;
+    auto sampleRefPathXml = std::make_unique<char[]>(sampleRefPathSize);
+    snprintf(sampleRefPathXml.get(), sampleRefPathSize, "%s%s_SAMPLE.xml", sampleNameBase, fileName);
+
+    normalNoteElement->SetAttribute("SampleRef", sampleRefPathXml.get());
     normalNoteElement->SetAttribute("Tuning", ((float)sampleRate / 32000.0f) * channels);
 
     size_t fontPathLen = sizeof(fontXmlBase) + strlen(fileName) + sizeof("_FONT.xml");
@@ -215,7 +229,7 @@ static void ProcessAudioFile(char* input) {
         numFrames = flac->totalPCMFrameCount;
     }
 
-    CreateSampleXml(fileName, audioTypeToStr[audioType], numFrames);
+    CreateSampleXml(fileName, audioTypeToStr[audioType], numFrames, numChannels);
 
     auto sampelDataPath = CopySampleData(input, fileName);
 
