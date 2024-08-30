@@ -1,12 +1,4 @@
 <Sequence Index="0" Medium="Cart" CachePolicy="Either" Size="0" Streamed="true">
     <FontIndicies>
-        <FontIndex FontIdx="197"/>
-        <FontIndex FontIdx="63"/>
-        <FontIndex FontIdx="204"/>
-        <FontIndex FontIdx="29"/>
-        <FontIndex FontIdx="221"/>
-        <FontIndex FontIdx="116"/>
-        <FontIndex FontIdx="251"/>
-        <FontIndex FontIdx="33"/>
     </FontIndicies>
 </Sequence>

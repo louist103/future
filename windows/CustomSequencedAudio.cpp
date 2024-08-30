@@ -110,7 +110,7 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
     // Fill in sample XML
     tinyxml2::XMLPrinter p;
     tinyxml2::XMLElement* root = sampleBaseRoot.RootElement();
-    root->SetAttribute("LoopEnd", numFrames * 2);
+    root->SetAttribute("LoopEnd", numFrames * numChannels);
     root->SetAttribute("CustomFormat", audioType);
     root->SetAttribute("SampleSize", numFrames * numChannels * 2);
     root->SetAttribute("SamplePath", sampleDataPath.get());
