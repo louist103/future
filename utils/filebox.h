@@ -22,6 +22,8 @@ bool GetSaveFilePath(char** inputBuffer);
 int ShowYesNoBox(const char* title, const char* box);
 void ShowErrorBox(const char* title, const char* text);
 size_t GetDiskFileSize(char* path);
+int CopyFileData(char* src, char* dest);
+int CreateDir(const char* dir);
 
 #ifdef _WIN32
 #endif

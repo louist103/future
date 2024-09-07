@@ -80,7 +80,7 @@ elseif ("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "arm64")
 endif()
 
 vcpkg_bootstrap()
-vcpkg_install_packages(zlib bzip2 libzip)
+vcpkg_install_packages(zlib bzip2 libzip tinyxml2 libogg libvorbis)
 endif()
 
 
@@ -104,7 +104,16 @@ target_link_libraries(future PUBLIC storm)
 find_package(libzip REQUIRED)
 target_link_libraries(future PRIVATE libzip::zip )
 
-target_compile_options(future PRIVATE -Wall -Wextra)
+
+find_package(Ogg CONFIG REQUIRED)
+target_link_libraries(future PRIVATE Ogg::ogg)
+
+
+find_package(Vorbis CONFIG REQUIRED)
+target_link_libraries(future PRIVATE Vorbis::vorbisfile)
+
+find_package(tinyxml2)
+target_link_libraries(future PRIVATE tinyxml2::tinyxml2)
 
 file (COPY assets/ DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/assets)
 
@@ -113,6 +122,4 @@ find_package(SDL2 REQUIRED)
 target_link_libraries(future PRIVATE SDL2::SDL2)
 find_package(OpenGL)
 target_link_libraries(future PRIVATE OpenGL::GL)
-find_package(tinyxml2)
-target_link_libraries(future PRIVATE tinyxml2::tinyxml2)
 endif()

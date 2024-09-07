@@ -33,13 +33,8 @@ public:
   T pop(void)
   {
     std::unique_lock<std::mutex> lock(m);
-    while(q.empty())
-    {
-      // release lock as long as the wait and reaquire it afterwards.
-      c.wait(lock);
-    }
-    T val = q.front();
-    q.pop();
+    T val = q.back();
+    q.pop_back();
     return val;
   }
 

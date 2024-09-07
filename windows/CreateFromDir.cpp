@@ -10,8 +10,8 @@
 #include <Shlwapi.h>
 #pragma comment (lib, "shlwapi.lib")
 #elif defined (__linux__)
-#include <filesystem>
 #endif
+#include <filesystem>
 
 CreateFromDirWindow::CreateFromDirWindow()
 {

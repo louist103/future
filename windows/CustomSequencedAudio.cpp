@@ -14,10 +14,13 @@
 #include <ogg/ogg.h>
 #include <vorbis/vorbisfile.h>
 
-#include "tinyxml2.h"
+#include <tinyxml2.h>
 #include <array>
+#include <atomic>
 
 #if defined (_WIN32)
+#include <Windows.h>
+#include <shlwapi.h>
 #elif defined (__linux__)
 #include <sys/stat.h>
 #include <sys/mman.h>
@@ -66,29 +69,11 @@ constexpr static std::array<const char*, 4> audioTypeToStr = {
 static char* GetFileNameFromPath(char* input) {
     size_t len = strlen(input);
     for (size_t i = len; i > 0; i--) {
-        if (input[i] == '/') {
+        if (input[i] == '/' || input[i] == '\\') {
             return &input[i + 1];
         }
     }
     return nullptr;
-}
-
-// Can't be called CopyFile becaues that function exists in the Win32 API
-static int CopyFileData(char* src, char* dest) {
-#if defined (_WIN32)
-#elif defined(__linux__)
-    int srcFd = open(src, O_RDONLY);
-    struct stat st;
-    fstat(srcFd, &st);
-    int destFd = open(dest, O_RDWR | O_CREAT, 0777);
-    ftruncate(destFd, st.st_size);
-    void* outData = mmap(nullptr, st.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, destFd, 0);
-    read(srcFd, outData, st.st_size);
-    munmap(outData, st.st_size);
-    close(destFd);
-    close(srcFd);
-    return 0;
-#endif
 }
 
 static std::unique_ptr<char[]> CopySampleData(char* input, char* fileName) {
@@ -250,9 +235,12 @@ static const ov_callbacks cbs = {
     VorbisTellCallback,
 };
 
-static void ProcessAudioFile(SafeQueue<char*> fileQueue) {
-    while (!fileQueue.empty()) {
-    char* input = fileQueue.pop();
+static std::atomic<unsigned int> filesProcessed = 0;
+
+static void ProcessAudioFile(SafeQueue<char*>* fileQueue) {
+    while (!fileQueue->empty()) {
+    filesProcessed++;
+    char* input = fileQueue->pop();
     char* fileName = GetFileNameFromPath(input);
     void* data;
     uint8_t* dataU8;
@@ -261,16 +249,22 @@ static void ProcessAudioFile(SafeQueue<char*> fileQueue) {
     uint64_t sampleRate;
     int audioType;
     int fileSize;
-    
+#if defined (_WIN32)
+    HANDLE hFile = CreateFileA(input, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE hMap = CreateFileMappingA(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
+    data = MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0);
+    LARGE_INTEGER size;
+    GetFileSizeEx(hFile, &size);
+    fileSize = size.QuadPart;
+#elif defined(__linux__)
     int fd = open(input, O_RDONLY);
     struct stat st;
     fstat(fd, &st);
     fileSize = st.st_size;
-    data = mmap(nullptr,st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    dataU8 = (uint8_t*)data;
-
+    data = mmap(nullptr,st.st_size, PROT_READ, MAP_PRIVATE, fd, 0)
     close(fd);
-
+#endif
+    dataU8 = (uint8_t*)data;
 
     // Read file header to determine which library needs to process it
     if (MP3_CHECK(dataU8)) {
@@ -299,7 +293,7 @@ static void ProcessAudioFile(SafeQueue<char*> fileQueue) {
         OggFileData fileData =  {
             .data = data,
             .pos = 0,
-            .size = fileSize,
+            .size = (size_t)fileSize,
         };
         int ret = ov_open_callbacks(&fileData, &vf, nullptr, 0, cbs);
         
@@ -320,7 +314,13 @@ static void ProcessAudioFile(SafeQueue<char*> fileQueue) {
 
     CreateSequenceXml(fileName, fontXmlPath.get());
 
+#if defined (_WIN32)
+    UnmapViewOfFile(data);
+    CloseHandle(hMap);
+    CloseHandle(hFile);
+#elif defined (__linux__)
     munmap(data, st.st_size);
+#endif
     }
 }
 
@@ -340,22 +340,24 @@ void CustomStreamedAudioWindow::ClearSaveBuff()
     }
 }
 
-static void PackFilesMgrWorker(SafeQueue<char*>& fileQueue, bool* workersDone) {
+static void PackFilesMgrWorker(SafeQueue<char*>* fileQueue, bool* threadStarted, bool* threadDone) {
     const unsigned int numThreads = std::thread::hardware_concurrency();
-    mkdir("custom", 0777);
-    mkdir("custom/fonts", 0777);
-    mkdir("custom/music", 0777);
-    mkdir("custom/sampleData", 0777);
-    mkdir("custom/samples", 0777);
+    CreateDir("custom");
+    CreateDir("custom/fonts");
+    CreateDir("custom/music");
+    CreateDir("custom/sampleData");
+    CreateDir("custom/samples");
 
     auto packFileThreads = std::make_unique<std::thread[]>(numThreads);
     for (unsigned int i = 0; i < numThreads; i++) {
-        packFileThreads[i] = std::thread(ProcessAudioFile, &fileQueue);
+        packFileThreads[i] = std::thread(ProcessAudioFile, fileQueue);
     }
 
     for (unsigned int i = 0; i < numThreads; i++) {
         packFileThreads[i].join();
     }
+    *threadStarted = false;
+    *threadDone = true;
 }
 
 void CustomStreamedAudioWindow::DrawWindow() {
@@ -376,15 +378,27 @@ void CustomStreamedAudioWindow::DrawWindow() {
     ImGui::TextUnformatted("Open a directory and create an archive with the files needed for streamed audio");
 
     if (ImGui::Button("Select Directory")) {
-        mThreadIsDone = false;
         ClearPathBuff();
         ClearSaveBuff();
         GetOpenDirPath(&mPathBuff);
         FillFileQueue();
+        fileCount = mFileQueue.size();
+        mThreadIsDone = false;
     }
+
+    if (mThreadStarted && !mThreadIsDone) {
+        ImGui::TextUnformatted("Packing files...");
+        ImGui::Text("Files processed %d\\%d", filesProcessed.load(), fileCount);
+    }
+
     if (mPathBuff != nullptr) {
         ImGui::SameLine();
-        ImGui::Text("Path to Pack: %s", mPathBuff);
+        if (mThreadIsDone) {
+            ImGui::Text("Packing complete. Files saved to: %s\\custom", mPathBuff);
+        }
+        else {
+            ImGui::Text("Path to Pack: %s", mPathBuff);
+        }
     }
     if (ImGui::Button("Set Save Path")) {
         GetSaveFilePath(&mSavePath);
@@ -393,7 +407,9 @@ void CustomStreamedAudioWindow::DrawWindow() {
     if (!mFileQueue.empty() && mPathBuff != nullptr /*&& mSavePath != nullptr*/) {
         if (ImGui::Button("Pack Archive")) {
             mThreadStarted = true;
-            std::thread packFilesMgrThread(PackFilesMgrWorker, &mFileQueue, &mThreadIsDone);
+            mThreadIsDone = false;
+            filesProcessed = 0;
+            std::thread packFilesMgrThread(PackFilesMgrWorker, &mFileQueue, &mThreadStarted, &mThreadIsDone);
             packFilesMgrThread.detach();
         }
     }
@@ -441,21 +457,32 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
 
 void CustomStreamedAudioWindow::FillFileQueue() {
 #ifdef _WIN32
+    char oldWorkingDir[MAX_PATH];
+    char oldWorkingDir2[MAX_PATH];
+    GetCurrentDirectoryA(MAX_PATH, oldWorkingDir);
+    bool ret = SetCurrentDirectoryA(mPathBuff);
+    GetCurrentDirectoryA(MAX_PATH, oldWorkingDir2);
     WIN32_FIND_DATAA ffd;
-    HANDLE h = FindFirstFileA(mPathBuff , &ffd);
-
+    HANDLE h = FindFirstFileA("*", &ffd);
+    
     do {
         if (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
             char* ext = PathFindExtensionA(ffd.cFileName);
 
             // Check for any standard N64 rom file extensions.
-            if (ext != NULL && (strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, ".flac"))
-                mFileQueue.push(strdup(ffd.cFileName));
+            if (ext != NULL && (strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, ".flac") == 0) {
+                size_t s1 = strlen(ffd.cFileName);
+                size_t s2 = strlen(mPathBuff);
+                size_t sizeToAlloc = s1 + s2 + 2;
+
+                char* fullPath = new char[sizeToAlloc];
+                snprintf(fullPath, sizeToAlloc, "%s\\%s", mPathBuff, ffd.cFileName);
+                mFileQueue.push(fullPath);
+            }
         }
     } while (FindNextFileA(h, &ffd) != 0);
-    // if (h != nullptr) {
-    //    CloseHandle(h);
-    //}
+    FindClose(h);
+    SetCurrentDirectoryA(oldWorkingDir);
 #elif unix
     // Change the current working directory to the path selected.
     char oldWorkingDir[PATH_MAX];

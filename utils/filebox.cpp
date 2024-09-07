@@ -1,3 +1,4 @@
+// TODO rename this file OS Utils or something
 #define _CRT_SECURE_NO_WARNINGS
 #include "filebox.h"
 #include <cstdlib>
@@ -42,7 +43,7 @@ bool GetOpenDirPath(char** inputBuffer) {
         *inputBuffer = new char[len + 1];
         wcstombs(*inputBuffer, path, len);
         // wcstombs doesn't null terminate the string for some reason...
-        (*inputBuffer)[len ] = 0;
+        (*inputBuffer)[len] = 0;
         CoTaskMemFree(path);
         result->Release();
     }
@@ -215,4 +216,32 @@ size_t GetDiskFileSize(char* path) {
     return (size_t)st.st_size;
 #endif
 
+}
+
+// Can't be called CopyFile becaues that function exists in the Win32 API
+int CopyFileData(char* src, char* dest) {
+#if defined (_WIN32)
+    CopyFileA(src, dest, false);
+#elif defined(__linux__)
+    int srcFd = open(src, O_RDONLY);
+    struct stat st;
+    fstat(srcFd, &st);
+    int destFd = open(dest, O_RDWR | O_CREAT, 0777);
+    ftruncate(destFd, st.st_size);
+    void* outData = mmap(nullptr, st.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, destFd, 0);
+    read(srcFd, outData, st.st_size);
+    munmap(outData, st.st_size);
+    close(destFd);
+    close(srcFd);
+#endif
+    return 0;
+}
+
+int CreateDir(const char* dir) {
+#if defined (_WIN32)
+    CreateDirectoryA(dir, nullptr);
+#elif defined(__linux__)
+    mkdir(dir, 0777);
+#endif
+    return 0;
 }

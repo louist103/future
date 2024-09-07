@@ -17,6 +17,7 @@ private:
     SafeQueue<char*> mFileQueue;
     char* mPathBuff = nullptr;
     char* mSavePath = nullptr;
+    unsigned int fileCount = 0;
     bool mThreadStarted = false;
     bool mThreadIsDone = false;
 };
