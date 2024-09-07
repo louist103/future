@@ -10,6 +10,10 @@ extern HWND gHwnd;
 #elif defined(__linux__)
 #include "portable-file-dialogs.h"
 #include "SDL2/SDL.h"
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #endif
 #include <cstring>

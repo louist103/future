@@ -22,11 +22,12 @@
 #include <Windows.h>
 #include <shlwapi.h>
 #elif defined (__linux__)
-#include <sys/stat.h>
-#include <sys/mman.h>
-#include <dirent.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
 #endif
 
 CustomStreamedAudioWindow::CustomStreamedAudioWindow() {
@@ -261,7 +262,7 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue) {
     struct stat st;
     fstat(fd, &st);
     fileSize = st.st_size;
-    data = mmap(nullptr,st.st_size, PROT_READ, MAP_PRIVATE, fd, 0)
+    data = mmap(nullptr,st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     close(fd);
 #endif
     dataU8 = (uint8_t*)data;

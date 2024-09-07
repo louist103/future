@@ -105,15 +105,9 @@ find_package(libzip REQUIRED)
 target_link_libraries(future PRIVATE libzip::zip )
 
 
-find_package(Ogg CONFIG REQUIRED)
-target_link_libraries(future PRIVATE Ogg::ogg)
 
 
-find_package(Vorbis CONFIG REQUIRED)
-target_link_libraries(future PRIVATE Vorbis::vorbisfile)
 
-find_package(tinyxml2)
-target_link_libraries(future PRIVATE tinyxml2::tinyxml2)
 
 file (COPY assets/ DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/assets)
 
@@ -122,4 +116,24 @@ find_package(SDL2 REQUIRED)
 target_link_libraries(future PRIVATE SDL2::SDL2)
 find_package(OpenGL)
 target_link_libraries(future PRIVATE OpenGL::GL)
+find_library(OGG_LIB ogg)
+target_link_libraries(future PRIVATE "${OGG_LIB}")
+
+find_library(VORBISFILE_LIB vorbisfile)
+target_link_libraries(future PRIVATE "${VORBISFILE_LIB}")
+
+find_library(TINYXML_LIB tinyxml2)
+target_link_libraries(future PRIVATE "${TINYXML_LIB}")
+
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+
+find_package(Ogg CONFIG REQUIRED)
+target_link_libraries(future PRIVATE Ogg::ogg)
+
+find_package(Vorbis CONFIG REQUIRED)
+target_link_libraries(future PRIVATE Vorbis::vorbisfile)
+
+find_package(tinyxml2)
+target_link_libraries(future PRIVATE tinyxml2::tinyxml2)
+
 endif()
