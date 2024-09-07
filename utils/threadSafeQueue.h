@@ -6,6 +6,7 @@
 #include <condition_variable>
 
 // A threadsafe-queue.
+// Technically this isn't a queue since its backed by a vector but its good enough.
 template <class T>
 class SafeQueue
 {

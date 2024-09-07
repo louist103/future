@@ -11,6 +11,9 @@
 #define DR_FLAC_IMPLEMENTATION
 #include "dr_flac.h"
 
+#include <ogg/ogg.h>
+#include <vorbis/vorbisfile.h>
+
 #include "tinyxml2.h"
 #include <array>
 
@@ -49,7 +52,9 @@ enum AudioType {
 
 #define WAV_CHECK(d) ((d[0] == 'R') && (d[1] == 'I') && (d[2] == 'F') && (d[3] == 'F'))
 
-#define FLAC_CHECK(d) ((d[0] == 'f') && (d[1] == 'L') && (d[3] == 'a') && (d[4] == 'C'))
+#define FLAC_CHECK(d) ((d[0] == 'f') && (d[1] == 'L') && (d[2] == 'a') && (d[3] == 'C'))
+
+#define OGG_CHECK(d) ((d[0] == 'O') && (d[1] == 'g') && (d[2] == 'g') && (d[3] == 'S'))
 
 constexpr static std::array<const char*, 4> audioTypeToStr = {
     "mp3",
@@ -152,7 +157,7 @@ static void CreateSequenceXml(char* fileName, char* fontPath) {
     p.ClearBuffer();
 }
 
-static std::unique_ptr<char[]> CreateFontXml(char* fileName, char* samplePath, uint64_t sampleRate, uint64_t channels) {
+static std::unique_ptr<char[]> CreateFontXml(char* fileName, uint64_t sampleRate, uint64_t channels) {
     constexpr static const char fontXmlBase[] = "custom/fonts/";
     constexpr static const char sampleNameBase[] = "custom/samples/";
     tinyxml2::XMLDocument fontBaseRoot;
@@ -185,7 +190,69 @@ static std::unique_ptr<char[]> CreateFontXml(char* fileName, char* samplePath, u
     return fontXmlPath;
 }
 
-static void ProcessAudioFile(char* input) {
+struct OggFileData {
+    void* data;
+    size_t pos;
+    size_t size;
+};
+
+static size_t VorbisReadCallback(void* out, size_t size, size_t elems, void* src) {
+    OggFileData* data = static_cast<OggFileData*>(src);
+    size_t toRead = size * elems;
+
+    if (toRead > data->size - data->pos) {
+        toRead = data->size - data->pos;
+    }
+
+    memcpy(out, static_cast<uint8_t*>(data->data) + data->pos, toRead);
+    data->pos += toRead;
+    
+    return toRead / size;
+}
+
+static int VorbisSeekCallback(void* src, ogg_int64_t pos, int whence) {
+    OggFileData* data = static_cast<OggFileData*>(src);
+    size_t newPos;
+    
+    switch(whence) {
+        case SEEK_SET:
+            newPos = pos;
+            break;
+        case SEEK_CUR:
+            newPos = data->pos + pos;
+            break;
+        case SEEK_END:
+            newPos = data->size + pos;
+            break;
+        default:
+            return -1;
+    }
+    if (newPos > data->size) {
+        return -1;
+    }
+    data->pos = newPos;
+    return 0;
+}
+
+static int VorbisCloseCallback([[maybe_unused]] void* src) {
+    return 0;
+}
+
+static long VorbisTellCallback(void* src) {
+    OggFileData* data = static_cast<OggFileData*>(src);
+    return data->pos;
+}
+
+static const ov_callbacks cbs = {
+    VorbisReadCallback,
+    VorbisSeekCallback,
+    VorbisCloseCallback,
+    VorbisTellCallback,
+};
+
+static void ProcessAudioFile(SafeQueue<char*> fileQueue) {
+    while (!fileQueue.empty()) {
+    char* input = fileQueue.pop();
     char* fileName = GetFileNameFromPath(input);
     void* data;
     uint8_t* dataU8;
@@ -194,7 +261,6 @@ static void ProcessAudioFile(char* input) {
     uint64_t sampleRate;
     int audioType;
     int fileSize;
-    
     
     int fd = open(input, O_RDONLY);
     struct stat st;
@@ -227,6 +293,22 @@ static void ProcessAudioFile(char* input) {
         numChannels = flac->channels;
         sampleRate = flac->sampleRate;
         numFrames = flac->totalPCMFrameCount;
+    } else if (OGG_CHECK(dataU8)) {
+        audioType = AudioType::ogg;
+        OggVorbis_File vf;
+        OggFileData fileData =  {
+            .data = data,
+            .pos = 0,
+            .size = fileSize,
+        };
+        int ret = ov_open_callbacks(&fileData, &vf, nullptr, 0, cbs);
+        
+        vorbis_info* vi = ov_info(&vf, -1);
+
+        numFrames = ov_pcm_total(&vf, -1);
+        sampleRate = vi->rate;
+        numChannels = vi->channels;
+        ov_clear(&vf);
     }
 
     CreateSampleXml(fileName, audioTypeToStr[audioType], numFrames, numChannels);
@@ -234,11 +316,12 @@ static void ProcessAudioFile(char* input) {
     auto sampelDataPath = CopySampleData(input, fileName);
 
     // Fill in sound font XML
-    auto fontXmlPath = CreateFontXml(fileName, sampelDataPath.get(), sampleRate, numChannels);
+    auto fontXmlPath = CreateFontXml(fileName, sampleRate, numChannels);
 
     CreateSequenceXml(fileName, fontXmlPath.get());
 
     munmap(data, st.st_size);
+    }
 }
 
 void CustomStreamedAudioWindow::ClearPathBuff()
@@ -254,6 +337,24 @@ void CustomStreamedAudioWindow::ClearSaveBuff()
     if (mSavePath != nullptr) {
         delete[] mSavePath;
         mSavePath = nullptr;
+    }
+}
+
+static void PackFilesMgrWorker(SafeQueue<char*>& fileQueue, bool* workersDone) {
+    const unsigned int numThreads = std::thread::hardware_concurrency();
+    mkdir("custom", 0777);
+    mkdir("custom/fonts", 0777);
+    mkdir("custom/music", 0777);
+    mkdir("custom/sampleData", 0777);
+    mkdir("custom/samples", 0777);
+
+    auto packFileThreads = std::make_unique<std::thread[]>(numThreads);
+    for (unsigned int i = 0; i < numThreads; i++) {
+        packFileThreads[i] = std::thread(ProcessAudioFile, &fileQueue);
+    }
+
+    for (unsigned int i = 0; i < numThreads; i++) {
+        packFileThreads[i].join();
     }
 }
 
@@ -289,24 +390,11 @@ void CustomStreamedAudioWindow::DrawWindow() {
         GetSaveFilePath(&mSavePath);
     }
 
-    //if (mSavePath != nullptr) {
-    //    ImGui::SameLine();
-    //    ImGui::Text("Path to New Archive: %s", mSavePath);
-    //}
-
     if (!mFileQueue.empty() && mPathBuff != nullptr /*&& mSavePath != nullptr*/) {
         if (ImGui::Button("Pack Archive")) {
-            mkdir("custom", 0777);
-            mkdir("custom/fonts", 0777);
-            mkdir("custom/music", 0777);
-            mkdir("custom/sampleData", 0777);
-            mkdir("custom/samples", 0777);
-            
-            for (size_t i = 0; i < mFileQueue.size(); i++) {
-                ProcessAudioFile(mFileQueue[i]);
-            }
-            //mAddFileThread = std::thread(AddFilesWorker, this);
-            //mAddFileThread.detach();
+            mThreadStarted = true;
+            std::thread packFilesMgrThread(PackFilesMgrWorker, &mFileQueue, &mThreadIsDone);
+            packFilesMgrThread.detach();
         }
     }
 
@@ -361,7 +449,7 @@ void CustomStreamedAudioWindow::FillFileQueue() {
             char* ext = PathFindExtensionA(ffd.cFileName);
 
             // Check for any standard N64 rom file extensions.
-            if (ext != NULL && (strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, "flac"))
+            if (ext != NULL && (strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, ".flac"))
                 mFileQueue.push(strdup(ffd.cFileName));
         }
     } while (FindNextFileA(h, &ffd) != 0);
@@ -389,7 +477,7 @@ void CustomStreamedAudioWindow::FillFileQueue() {
                 // Get the position of the extension character.
                 char* ext = strrchr(dir->d_name, '.');
                 if (ext == nullptr) continue;
-                if ((strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, "flac") == 0) {
+                if ((strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, ".flac") == 0) {
                     size_t s1 = strlen(dir->d_name);
                     size_t s2 = strlen(mPathBuff);
                     size_t sizeToAlloc = s1 + s2 + 2;
