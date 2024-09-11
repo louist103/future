@@ -1,0 +1,93 @@
+name: generate-builds
+on:
+  push:
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y libsdl2-dev libzip-dev libogg-dev libvorbis-dev libtinyxml2-dev zipcmp zipmerge ziptool
+    - name: Build
+      run: |
+        cmake -S. -Bbuild-rel -DCMAKE_BUILD_TYPE:STRING=Release
+        cmake --build build-rel --config Release -j3
+        (cd build-rel && cpack -G External)
+
+        mv build-rel/*.appimage future.appimage
+    - name: Upload build
+      uses: actions/upload-artifact@v4
+      with:
+        name: future-linux
+        path: |
+          future.appimage
+  build-linux-legacy:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y libsdl2-dev libzip-dev libogg-dev libvorbis-dev libtinyxml2-dev zipcmp zipmerge ziptool
+    - name: Build
+      run: |
+        cmake -S. -Bbuild-rel -DCMAKE_BUILD_TYPE:STRING=Release
+        cmake --build build-rel --config Release -j3
+        (cd build-rel && cpack -G External)
+
+        mv build-rel/*.appimage future.appimage
+    - name: Upload build
+      uses: actions/upload-artifact@v4
+      with:
+        name: future-linux-legacy
+        path: |
+          future.appimage
+  build-windows-x64:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Build
+      run: |
+         cmake -S . -B build-windows -DCMAKE_BUILD_TYPE:STRING=Release -A x64
+         cmake --build build-windows --config Release --parallel 10
+         mkdir future-windows-x64
+         cd future-windows-x64
+         cp ..\build-windows\Release\future.exe .\future.exe
+         cp -r ..\build-windows\assets .\assets
+    - name: Upload
+      uses: actions/upload-artifact@v4 
+      with:
+        name: future-windows-x64
+        path: future-windows-x64
+
+  build-windows-arm64:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Build
+      run: |
+         cmake -S . -B build-windows -DCMAKE_BUILD_TYPE:STRING=Release -A arm64
+         cmake --build build-windows --config Release --parallel 10
+         mkdir future-windows-arm64
+         cd future-windows-arm64
+         cp ..\build-windows\Release\future.exe .\future.exe
+         cp -r ..\build-windows\assets .\assets
+    - name: Upload
+      uses: actions/upload-artifact@v4 
+      with:
+        name: future-windows-arm64
+        path: future-windows-arm64

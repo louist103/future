@@ -14,7 +14,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #endif
-#include <immintrin.h>
+//#include <immintrin.h>
 
 ExploreWindow::ExploreWindow() {
     // ImGui::InputText can't handle a null buffer being passed in.
@@ -68,12 +68,12 @@ void ExploreWindow::DrawWindow() {
     }
     if (mArchive != nullptr) {
         long long start, stop;
-        start = __rdtsc();
+        //start = __rdtsc();
         DrawFileList();
-        stop = __rdtsc();
+        //stop = __rdtsc();
         ImVec2 curPos = ImGui::GetCursorPos();
         ImGui::SetCursorPos({400.0f,20.0f});
-        ImGui::Text("MS to show list: %llu", (stop-start)/1996800);
+        //ImGui::Text("MS to show list: %llu", (stop-start)/1996800);
         ImGui::SetCursorPos(curPos);
         if (viewWindow != nullptr) {
             viewWindow->DrawWindow();
