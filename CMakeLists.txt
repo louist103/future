@@ -7,6 +7,7 @@ set(IMGUI_DIR extern/imgui)
 include_directories(${IMGUI_DIR})
 include_directories(${IMGUI_DIR}/backends)
 include_directories(extern/dr_libs)
+include_directories(extern/imgui_toggle)
 
 # tinyxml2.h is in the extern folder. Only windows builds it.
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
@@ -18,6 +19,10 @@ file (GLOB future__imgui
     extern/imgui/imgui_draw.cpp
     extern/imgui/imgui_tables.cpp
     extern/imgui/imgui_widgets.cpp
+)
+
+file (GLOB future__imgui_toggle
+    extern/imgui_toggle/*.cpp
 )
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
@@ -68,6 +73,7 @@ endif()
 
 set(ALL_FILES
     ${future__imgui}
+    ${future__imgui_toggle}
     ${future__main}
     ${future__imgui_backend}
     ${future__windows}

@@ -3,7 +3,6 @@
 #include "filebox.h"
 #include <cstring>
 #include <memory>
-
 ZipArchive::ZipArchive() {
 
 }
@@ -12,10 +11,18 @@ ZipArchive::ZipArchive(const char* path) {
     OpenArchive(path);
 }
 
-ZipArchive::~ZipArchive()
-{
-    files.clear();
+ZipArchive::~ZipArchive() {
     CloseArchive();
+    for (const auto d : mCopiedData) {
+        free(d);
+    }
+
+    for (const auto m : mMemoryMaps) {
+        UnmapFile(m.data, 0);
+    }
+
+    files.clear();
+    
 }
 
 bool ZipArchive::OpenArchive(const char *path) {
@@ -130,4 +137,48 @@ void ZipArchive::CreateArchiveFromList(std::vector<char*>& list, char* pathBase)
 
 void ZipArchive::RegisterProgressCallback(zip_progress_callback cb, void* callingClass) {
     zip_register_progress_callback_with_state(mArchive, 0.01, cb, nullptr, callingClass);
+}
+
+#if defined (_WIN32)
+#define CREATE_MAPPED_INFO(data, size) {data}
+#elif defined (__linux__)
+#define CREATE_MAPPED_INFO(data, size) {data, size}
+#endif
+
+void ZipArchive::WriteFile(char* path, const ArchiveDataInfo* data) {
+    std::lock_guard<std::mutex> lock(m);
+    WriteFileUnlocked(path, data);
+    c.notify_one();
+}
+
+void ZipArchive::WriteFileUnlocked(char* path, const ArchiveDataInfo* data) {
+    zip_error_t err;
+    zip_source_t* source;
+
+    switch (data->mode) {
+    case DataCopy: {
+        // libzip requires the data given used to create the source data
+        // stay valid until the archive is closed. We will free this data in the destructor
+        // after closing the archive. 
+        // Must be allocated with `malloc`
+        void* copy = malloc(data->size);
+
+        memcpy(copy, data->data, data->size);
+        source = zip_source_buffer_create(copy, data->size, 0, &err);
+        mCopiedData.push_back(copy);
+        break;
+    }
+    case MappedFile: {
+        // To avoid copying file data we can create a memory map of a file to add.
+        // We still must maintain a pointer to this data but it avoids copies.
+        // We will also unmap these in the destructor.
+        source = zip_source_buffer_create(data->data, data->size, 0, &err);
+        
+        mMemoryMaps.push_back(CREATE_MAPPED_INFO(data->data, data->size));
+        break;
+    }
+    }
+
+    zip_int64_t rv = zip_file_add(mArchive, path, source, ZIP_FL_OVERWRITE | ZIP_FL_ENC_UTF_8);
+    zip_set_file_compression(mArchive, rv, ZIP_CM_STORE, 0);
 }

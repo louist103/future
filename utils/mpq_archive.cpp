@@ -29,7 +29,7 @@ MpqArchive::~MpqArchive()
 }
 
 bool MpqArchive::OpenArchive(const char *path) {
-    if (!SFileCreateArchive(path, 0, MPQ_OPEN_READ_ONLY, &mArchive)) {
+    if (!SFileCreateArchive(path, 0, 4096, &mArchive)) {
         DWORD err = GetLastError();
         if (err == ERROR_FILE_EXISTS) {
             SFileOpenArchive(path, 0, 0, &mArchive);
@@ -114,5 +114,23 @@ void MpqArchive::CreateArchiveFromList(std::vector<char*>& list, char* pathBase)
 
         delete[] list.back();
         list.pop_back();
+    }
+}
+
+void MpqArchive::WriteFile(char* path, const ArchiveDataInfo* data) {
+    std::lock_guard<std::mutex> lock(m);
+    WriteFileUnlocked(path, data);
+    c.notify_one();
+}
+
+void MpqArchive::WriteFileUnlocked(char* path, const ArchiveDataInfo* data) {
+    HANDLE hFile;
+
+    SFileCreateFile(mArchive, path, 0, data->size, 0, 0, &hFile);
+    SFileWriteFile(hFile, data->data, data->size, 0);
+    if (data->mode == MappedFile) {
+        // MPQs write the data when the write function is calle, not when the archive is closed.
+        // so we don't need to copy the data
+        UnmapFile(data->data, data->size);
     }
 }

@@ -24,6 +24,7 @@ void ShowErrorBox(const char* title, const char* text);
 size_t GetDiskFileSize(char* path);
 int CopyFileData(char* src, char* dest);
 int CreateDir(const char* dir);
+void UnmapFile(void* data, size_t size);
 
 #ifdef _WIN32
 #endif

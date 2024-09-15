@@ -26,6 +26,8 @@ public:
     void GenFileList() override;
     void CreateArchiveFromList(std::vector<char*>& list, char* basePath) override;
     
+    void WriteFile(char* path, const ArchiveDataInfo* data) override;
+    void WriteFileUnlocked(char* path, const ArchiveDataInfo* data) override;
 private:
     size_t GetFileSize(HANDLE fileHandle) const;
     HANDLE mArchive = nullptr;

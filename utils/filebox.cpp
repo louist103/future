@@ -249,3 +249,11 @@ int CreateDir(const char* dir) {
 #endif
     return 0;
 }
+
+void UnmapFile(void* data, [[maybe_unused]] size_t size) {
+#if defined (_WIN32)
+    UnmapViewOfFile(data);
+#elif defined(__linux__)
+    munmap(data, size);
+#endif
+}

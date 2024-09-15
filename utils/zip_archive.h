@@ -5,6 +5,13 @@
 #include "stdlib.h"
 #include "zip.h"
 
+typedef struct MappedFileInfo {
+    void* data;
+    // linux needs the size of the mapped region to unmap it. Windows does not.
+#if not defined(_WIN32)
+    size_t size;
+#endif
+} MappedFileInfo;
 
 class ZipArchive : public Archive {
 public:
@@ -28,7 +35,12 @@ public:
     void GenFileList() override;
     void CreateArchiveFromList(std::vector<char*>& list, char* basePath) override;
     void RegisterProgressCallback(zip_progress_callback cb, void* callingClass);
+
+    void WriteFile(char* path, const ArchiveDataInfo* data) override;
+    void WriteFileUnlocked(char* path, const ArchiveDataInfo* data) override;
 private:
+    std::vector<void*> mCopiedData;
+    std::vector<MappedFileInfo> mMemoryMaps;
     zip_t* mArchive = nullptr;
 
 };
