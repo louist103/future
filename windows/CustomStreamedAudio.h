@@ -9,6 +9,8 @@ public:
     CustomStreamedAudioWindow();
     ~CustomStreamedAudioWindow();
     void DrawWindow();
+    int GetRadioState();
+    char* GetSavePath();
 private:
     void DrawPendingFilesList();
     void ClearPathBuff();
@@ -18,8 +20,10 @@ private:
     char* mPathBuff = nullptr;
     char* mSavePath = nullptr;
     unsigned int fileCount = 0;
+    int mRadioState = 2;
     bool mThreadStarted = false;
     bool mThreadIsDone = false;
+    bool mPackAsArchive = false;
 };
 
 #endif

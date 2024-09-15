@@ -1,5 +1,10 @@
 #include "CustomStreamedAudio.h"
+#include "archive.h"
+#include "zip_archive.h"
+#include "mpq_archive.h"
+
 #include "imgui.h"
+#include "imgui_toggle.h"
 #include "WindowMgr.h"
 #include "filebox.h"
 #include "CRC64.h"
@@ -77,16 +82,57 @@ static char* GetFileNameFromPath(char* input) {
     return nullptr;
 }
 
-static std::unique_ptr<char[]> CopySampleData(char* input, char* fileName) {
+// Write `data` to either the archive, or if the archive is null, a file on disk
+static void WriteFileData(char* path, void* data, size_t size, Archive* a) {
+    if (a == nullptr) {
+        FILE* file = fopen(path, "wb+");
+        fwrite(data, size, 1, file);
+        fclose(file);
+    }
+    else {
+        const ArchiveDataInfo info = {
+            .data = data, .size = size, .mode = DataCopy 
+        };
+        a->WriteFile(path, &info);
+    }
+}
+
+static void CopySampleData(char* input, char* fileName, Archive* a) {
     constexpr static const char sampleDataBase[] = "custom/sampleData/";
     size_t sampleDataPathLen = sizeof(sampleDataBase) + strlen(fileName) + 1;
     auto sampleDataPath = std::make_unique<char[]>(sampleDataPathLen);
     snprintf(sampleDataPath.get(), sampleDataPathLen, "%s%s", sampleDataBase, fileName);
-    CopyFileData(input, sampleDataPath.get());
-    return sampleDataPath;
+    if (a == nullptr) {
+        CopyFileData(input, sampleDataPath.get());
+    }
+    else {
+        void* data;
+        size_t fileSize;
+#if defined (_WIN32)
+        HANDLE hFile = CreateFileA(input, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        HANDLE hMap = CreateFileMappingA(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
+        data = MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0);
+        LARGE_INTEGER size;
+        GetFileSizeEx(hFile, &size);
+        fileSize = size.QuadPart;
+        CloseHandle(hMap);
+        CloseHandle(hFile);
+#elif defined(__linux__)
+        int fd = open(input, O_RDONLY);
+        struct stat st;
+        fstat(fd, &st);
+        fileSize = st.st_size;
+        data = mmap(nullptr, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+        close(fd);
+#endif
+        const ArchiveDataInfo info = {
+            .data = data, .size = fileSize, .mode = MappedFile
+        };
+        a->WriteFile(sampleDataPath.get(), &info);
+    }
 }
 
-static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numFrames, uint64_t numChannels) {
+static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numFrames, uint64_t numChannels, Archive* a) {
     constexpr static const char sampleXmlBase[] = "custom/samples/";
     constexpr static const char sampleDataBase[] = "custom/sampleData/";
 
@@ -108,15 +154,14 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
     size_t samplePathLen = sizeof(sampleXmlBase) + strlen(fileName) + sizeof("_SAMPLE.xml") + 1;
     std::unique_ptr<char[]> sampleXmlPath = std::make_unique<char[]>(samplePathLen);
     snprintf(sampleXmlPath.get(), samplePathLen, "%s%s_SAMPLE.xml", sampleXmlBase, fileName);
-    FILE* outFile = fopen(sampleXmlPath.get(), "w");
-    sampleBaseRoot.Accept(&p);
+    root->Accept(&p);
 
-    fwrite(p.CStr(), p.CStrSize() - 1, 1, outFile);
-    fclose(outFile);
+    WriteFileData(sampleXmlPath.get(), (void*)p.CStr(), p.CStrSize() - 1, a);
+
     p.ClearBuffer();
 }
 
-static void CreateSequenceXml(char* fileName, char* fontPath) {
+static void CreateSequenceXml(char* fileName, char* fontPath, Archive* a) {
     constexpr static const char fontXmlBase[] = "custom/music/";
     tinyxml2::XMLDocument seqBaseRoot;
     tinyxml2::XMLError e = seqBaseRoot.LoadFile("assets/seq-base.xml");
@@ -135,15 +180,14 @@ static void CreateSequenceXml(char* fileName, char* fontPath) {
     size_t seqPathLen = sizeof(fontXmlBase) + strlen(fileName) + sizeof("_SEQ.xml");
     auto seqXmlPath = std::make_unique<char[]>(seqPathLen);
     snprintf(seqXmlPath.get(), seqPathLen, "%s%s_SEQ.xml", fontXmlBase, fileName);
-    FILE* outFile = fopen(seqXmlPath.get(), "w");
-    seqBaseRoot.Accept(&p);
+    root->Accept(&p);
 
-    fwrite(p.CStr(), p.CStrSize() - 1, 1, outFile);
-    fclose(outFile);
+    WriteFileData(seqXmlPath.get(), (void*)p.CStr(), p.CStrSize() - 1, a);
+    
     p.ClearBuffer();
 }
 
-static std::unique_ptr<char[]> CreateFontXml(char* fileName, uint64_t sampleRate, uint64_t channels) {
+static std::unique_ptr<char[]> CreateFontXml(char* fileName, uint64_t sampleRate, uint64_t channels, Archive* a) {
     constexpr static const char fontXmlBase[] = "custom/fonts/";
     constexpr static const char sampleNameBase[] = "custom/samples/";
     tinyxml2::XMLDocument fontBaseRoot;
@@ -165,12 +209,12 @@ static std::unique_ptr<char[]> CreateFontXml(char* fileName, uint64_t sampleRate
 
     size_t fontPathLen = sizeof(fontXmlBase) + strlen(fileName) + sizeof("_FONT.xml");
     auto fontXmlPath = std::make_unique<char[]>(fontPathLen);
-    snprintf(fontXmlPath.get(), fontPathLen, "%s%s_FONT.xml", fontXmlBase, fileName);
-    FILE* outFile = fopen(fontXmlPath.get(), "w");
-    fontBaseRoot.Accept(&p);
 
-    fwrite(p.CStr(), p.CStrSize() - 1, 1, outFile);
-    fclose(outFile);
+    snprintf(fontXmlPath.get(), fontPathLen, "%s%s_FONT.xml", fontXmlBase, fileName);
+    root->Accept(&p);
+
+    WriteFileData(fontXmlPath.get(), (void*)p.CStr(), p.CStrSize() - 1, a);
+
     p.ClearBuffer();
 
     return fontXmlPath;
@@ -236,9 +280,11 @@ static const ov_callbacks cbs = {
     VorbisTellCallback,
 };
 
+// We don't want this to show less files than exist in the folder to pack when the operation is finished.
+// `atomic` variables will ensure there isn't any inconsistency due to multi-threading.
 static std::atomic<unsigned int> filesProcessed = 0;
 
-static void ProcessAudioFile(SafeQueue<char*>* fileQueue) {
+static void ProcessAudioFile(SafeQueue<char*>* fileQueue, Archive* a) {
     while (!fileQueue->empty()) {
     filesProcessed++;
     char* input = fileQueue->pop();
@@ -250,12 +296,16 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue) {
     uint64_t sampleRate;
     int audioType;
     int fileSize;
+    // Optimized file reading. Mapping files allows reading them as a buffer without
+    // needing to allocate a buffer and copy the data in.
 #if defined (_WIN32)
     HANDLE hFile = CreateFileA(input, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     HANDLE hMap = CreateFileMappingA(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
     data = MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0);
+    CloseHandle(hMap);
     LARGE_INTEGER size;
     GetFileSizeEx(hFile, &size);
+    CloseHandle(hFile);
     fileSize = size.QuadPart;
 #elif defined(__linux__)
     int fd = open(input, O_RDONLY);
@@ -305,23 +355,23 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue) {
         numChannels = vi->channels;
         ov_clear(&vf);
     }
+    else {
+        goto end;
+    }
+    // Must be scoped due to goto statement
+    {
+        CreateSampleXml(fileName, audioTypeToStr[audioType], numFrames, numChannels, a);
 
-    CreateSampleXml(fileName, audioTypeToStr[audioType], numFrames, numChannels);
+        CopySampleData(input, fileName, a);
 
-    auto sampelDataPath = CopySampleData(input, fileName);
+        // Fill in sound font XML
+        auto fontXmlPath = CreateFontXml(fileName, sampleRate, numChannels, a);
 
-    // Fill in sound font XML
-    auto fontXmlPath = CreateFontXml(fileName, sampleRate, numChannels);
+        CreateSequenceXml(fileName, fontXmlPath.get(), a);
+    }
+end:
 
-    CreateSequenceXml(fileName, fontXmlPath.get());
-
-#if defined (_WIN32)
-    UnmapViewOfFile(data);
-    CloseHandle(hMap);
-    CloseHandle(hFile);
-#elif defined (__linux__)
-    munmap(data, st.st_size);
-#endif
+    UnmapFile(data, fileSize);
     }
 }
 
@@ -341,24 +391,55 @@ void CustomStreamedAudioWindow::ClearSaveBuff()
     }
 }
 
-static void PackFilesMgrWorker(SafeQueue<char*>* fileQueue, bool* threadStarted, bool* threadDone) {
-    const unsigned int numThreads = std::thread::hardware_concurrency();
-    CreateDir("custom");
-    CreateDir("custom/fonts");
-    CreateDir("custom/music");
-    CreateDir("custom/sampleData");
-    CreateDir("custom/samples");
 
+static void PackFilesMgrWorker(SafeQueue<char*>* fileQueue, bool* threadStarted, bool* threadDone, CustomStreamedAudioWindow* thisx) {
+    Archive* a = nullptr;
+    // 0 means don't create an archive and instead move the files into folders
+    if (thisx->GetRadioState() == 0) {
+        CreateDir("custom");
+        CreateDir("custom/fonts");
+        CreateDir("custom/music");
+        CreateDir("custom/sampleData");
+        CreateDir("custom/samples");
+    }
+    else {
+        switch (thisx->GetRadioState()) {
+            case 1: {
+                a = new MpqArchive(thisx->GetSavePath());
+                break;
+            }
+            case 2: {
+                a = new ZipArchive(thisx->GetSavePath());
+                break;
+            }
+        }
+    }
+
+    const unsigned int numThreads = std::thread::hardware_concurrency();
     auto packFileThreads = std::make_unique<std::thread[]>(numThreads);
     for (unsigned int i = 0; i < numThreads; i++) {
-        packFileThreads[i] = std::thread(ProcessAudioFile, fileQueue);
+        packFileThreads[i] = std::thread(ProcessAudioFile, fileQueue, a);
     }
 
     for (unsigned int i = 0; i < numThreads; i++) {
         packFileThreads[i].join();
     }
+    a->CloseArchive();
     *threadStarted = false;
     *threadDone = true;
+}
+
+static std::array<const char*, 2> sToggleLabels = {
+    "Create Folder",
+    "Create Archive",
+};
+
+int CustomStreamedAudioWindow::GetRadioState() {
+    return mRadioState;
+}
+
+char* CustomStreamedAudioWindow::GetSavePath() {
+    return mSavePath;
 }
 
 void CustomStreamedAudioWindow::DrawWindow() {
@@ -387,31 +468,54 @@ void CustomStreamedAudioWindow::DrawWindow() {
         mThreadIsDone = false;
     }
 
+    if (mPathBuff != nullptr) {
+        if (mThreadIsDone) {
+            ImGui::Text("Packing complete. Files saved in the \"custom\" folder in the program's directory");
+        }
+        else {
+            ImGui::SameLine();
+            ImGui::Text("Path of files to Pack: %s", mPathBuff);
+        }
+    }
+
+    ImGui::Toggle(sToggleLabels[mPackAsArchive], &mPackAsArchive, ImGuiToggleFlags_Animated, 1.0f); //TODO it doesn't animate.
+    
+    if (mPackAsArchive) {
+        ImGui::SameLine();
+        ImGui::RadioButton("OTR", &mRadioState, 1);
+        ImGui::SameLine();
+        ImGui::RadioButton("O2R", &mRadioState, 2);
+    }
+    else {
+        mRadioState = 0;
+    }
+    if (mPackAsArchive) {
+        if (ImGui::Button("Set Save Path")) {
+            GetSaveFilePath(&mSavePath);
+        }
+    }
+
     if (mThreadStarted && !mThreadIsDone) {
         ImGui::TextUnformatted("Packing files...");
         ImGui::Text("Files processed %d\\%d", filesProcessed.load(), fileCount);
     }
 
-    if (mPathBuff != nullptr) {
+
+
+    if (mSavePath != nullptr) {
         ImGui::SameLine();
-        if (mThreadIsDone) {
-            ImGui::Text("Packing complete. Files saved to: %s\\custom", mPathBuff);
-        }
-        else {
-            ImGui::Text("Path to Pack: %s", mPathBuff);
-        }
-    }
-    if (ImGui::Button("Set Save Path")) {
-        GetSaveFilePath(&mSavePath);
+        ImGui::Text("Archive save path: %s", mSavePath);
     }
 
-    if (!mFileQueue.empty() && mPathBuff != nullptr /*&& mSavePath != nullptr*/) {
-        if (ImGui::Button("Pack Archive")) {
-            mThreadStarted = true;
-            mThreadIsDone = false;
-            filesProcessed = 0;
-            std::thread packFilesMgrThread(PackFilesMgrWorker, &mFileQueue, &mThreadStarted, &mThreadIsDone);
-            packFilesMgrThread.detach();
+    if (!mFileQueue.empty() && mPathBuff != nullptr) {
+        if (!mPackAsArchive || (mPackAsArchive && mSavePath != nullptr)) {
+            if (ImGui::Button("Pack Archive")) {
+                mThreadStarted = true;
+                mThreadIsDone = false;
+                filesProcessed = 0;
+                std::thread packFilesMgrThread(PackFilesMgrWorker, &mFileQueue, &mThreadStarted, &mThreadIsDone, this);
+                packFilesMgrThread.detach();
+            }
         }
     }
 
