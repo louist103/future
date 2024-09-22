@@ -22,6 +22,7 @@
 #include <tinyxml2.h>
 #include <array>
 #include <atomic>
+#include <cmath>
 
 #if defined (_WIN32)
 #include <Windows.h>
@@ -161,7 +162,7 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
     p.ClearBuffer();
 }
 
-static void CreateSequenceXml(char* fileName, char* fontPath, Archive* a) {
+static void CreateSequenceXml(char* fileName, char* fontPath, unsigned int length, Archive* a) {
     constexpr static const char fontXmlBase[] = "custom/music/";
     tinyxml2::XMLDocument seqBaseRoot;
     tinyxml2::XMLError e = seqBaseRoot.LoadFile("assets/seq-base.xml");
@@ -177,6 +178,7 @@ static void CreateSequenceXml(char* fileName, char* fontPath, Archive* a) {
         fontIdxElement->SetAttribute("FontIdx", ((uint8_t*)&crc)[i]);
         fontIndiciesElement->InsertEndChild(fontIdxElement);
     }
+    root->SetAttribute("Length", length);
     size_t seqPathLen = sizeof(fontXmlBase) + strlen(fileName) + sizeof("_SEQ.xml");
     auto seqXmlPath = std::make_unique<char[]>(seqPathLen);
     snprintf(seqXmlPath.get(), seqPathLen, "%s%s_SEQ.xml", fontXmlBase, fileName);
@@ -366,8 +368,11 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue, Archive* a) {
 
         // Fill in sound font XML
         auto fontXmlPath = CreateFontXml(fileName, sampleRate, numChannels, a);
-
-        CreateSequenceXml(fileName, fontXmlPath.get(), a);
+        // There is no good way to determine the length of the song when we go to load it so we need to store the length in seconds.
+        float lengthF = (float)numFrames / (float)sampleRate;
+        lengthF = ceilf(lengthF);
+        unsigned int length = static_cast<unsigned int>(lengthF);
+        CreateSequenceXml(fileName, fontXmlPath.get(), length, a);
     }
 end:
 
