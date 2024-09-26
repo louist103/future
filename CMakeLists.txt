@@ -71,6 +71,10 @@ else()
 set (future__tinyxml2 "")
 endif()
 
+file (GLOB future__xml_embed
+    utils/xml_embed.cpp
+)
+
 set(ALL_FILES
     ${future__imgui}
     ${future__imgui_toggle}
@@ -79,6 +83,7 @@ set(ALL_FILES
     ${future__windows}
     ${future__utils}
     ${future__tinyxml2}
+    ${future__xml_embed}
 )
 
 ################################################################################

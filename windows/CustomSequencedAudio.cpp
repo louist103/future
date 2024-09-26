@@ -3,6 +3,8 @@
 #include "zip_archive.h"
 #include "mpq_archive.h"
 
+#include "xml_embed.h"
+
 #include "imgui.h"
 #include "imgui_toggle.h"
 #include "WindowMgr.h"
@@ -139,7 +141,14 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
 
     tinyxml2::XMLDocument sampleBaseRoot;
     tinyxml2::XMLError e = sampleBaseRoot.LoadFile("assets/sample-base.xml");
-    assert(e == 0);
+    if (e != 0) {
+        printf("Failed to open sample-base.xml. Falling back to the embeded version...\n");
+        e = sampleBaseRoot.Parse(gSampleBaseXml, SAMPLE_BASE_XML_SIZE);
+        if (e != 0) {
+            printf("Failed to parse embeded XML. Exiting...\n");
+            exit(1);
+        }
+    }
     
     size_t sampleDataSize = sizeof(sampleDataBase) + strlen(fileName) + 1;
     auto sampleDataPath = std::make_unique<char[]>(sampleDataSize);
@@ -166,7 +175,14 @@ static void CreateSequenceXml(char* fileName, char* fontPath, unsigned int lengt
     constexpr static const char fontXmlBase[] = "custom/music/";
     tinyxml2::XMLDocument seqBaseRoot;
     tinyxml2::XMLError e = seqBaseRoot.LoadFile("assets/seq-base.xml");
-    assert(e == 0);
+    if (e != 0) {
+        printf("Failed to open seq-base.xml. Falling back to the embeded version...\n");
+        e = seqBaseRoot.Parse(gSequenceBaseXml, SEQ_BASE_XML_SIZE);
+        if (e != 0) {
+            printf("Failed to parse embeded XML. Exiting...\n");
+            exit(1);
+        }
+    }
 
     tinyxml2::XMLPrinter p;
     tinyxml2::XMLElement* root = seqBaseRoot.FirstChildElement();
@@ -194,7 +210,14 @@ static std::unique_ptr<char[]> CreateFontXml(char* fileName, uint64_t sampleRate
     constexpr static const char sampleNameBase[] = "custom/samples/";
     tinyxml2::XMLDocument fontBaseRoot;
     tinyxml2::XMLError e = fontBaseRoot.LoadFile("assets/font-base.xml");
-    assert(e == 0);
+    if (e != 0) {
+        printf("Failed to open font-base.xml. Falling back to the embeded version...\n");
+        e = fontBaseRoot.Parse(gFontBaseXml, FONT_BASE_XML_SIZE);
+        if (e != 0) {
+            printf("Failed to parse embeded XML. Exiting...\n");
+            exit(1);
+        }
+    }
 
     tinyxml2::XMLPrinter p;
     tinyxml2::XMLElement* root = fontBaseRoot.FirstChildElement();
