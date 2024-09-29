@@ -5,12 +5,6 @@
 #include "zip_archive.h"
 #include "mpq_archive.h"
 #include <string.h>
-#if defined(_WIN32)
-#include <Windows.h>
-#include <Shlwapi.h>
-#pragma comment (lib, "shlwapi.lib")
-#elif defined (__linux__)
-#endif
 #include <filesystem>
 
 CreateFromDirWindow::CreateFromDirWindow()

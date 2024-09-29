@@ -128,7 +128,7 @@ void MpqArchive::WriteFileUnlocked(char* path, const ArchiveDataInfo* data) {
 
     SFileCreateFile(mArchive, path, 0, data->size, 0, 0, &hFile);
     SFileWriteFile(hFile, data->data, data->size, 0);
-    if (data->mode == MappedFile) {
+    if (data->mode == MMappedFile) {
         // MPQs write the data when the write function is calle, not when the archive is closed.
         // so we don't need to copy the data
         UnmapFile(data->data, data->size);

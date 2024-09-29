@@ -26,16 +26,7 @@
 #include <atomic>
 #include <cmath>
 
-#if defined (_WIN32)
-#include <Windows.h>
-#elif defined (__linux__)
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/mman.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#endif
+#include "MappedFile.h"
 
 CustomStreamedAudioWindow::CustomStreamedAudioWindow() {
 
@@ -110,25 +101,12 @@ static void CopySampleData(char* input, char* fileName, Archive* a) {
     else {
         void* data;
         size_t fileSize;
-#if defined (_WIN32)
-        HANDLE hFile = CreateFileA(input, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        HANDLE hMap = CreateFileMappingA(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
-        data = MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0);
-        LARGE_INTEGER size;
-        GetFileSizeEx(hFile, &size);
-        fileSize = size.QuadPart;
-        CloseHandle(hMap);
-        CloseHandle(hFile);
-#elif defined(__linux__)
-        int fd = open(input, O_RDONLY);
-        struct stat st;
-        fstat(fd, &st);
-        fileSize = st.st_size;
-        data = mmap(nullptr, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-        close(fd);
-#endif
+        MappedFile mappedFile(input, ReadOnly | OpenExisting);
+        data = mappedFile.GetData();
+        fileSize = mappedFile.GetSize();
+        mappedFile.Release();
         const ArchiveDataInfo info = {
-            .data = data, .size = fileSize, .mode = MappedFile
+            .data = data, .size = fileSize, .mode = MMappedFile
         };
         a->WriteFile(sampleDataPath.get(), &info);
     }
@@ -313,32 +291,16 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue, Archive* a) {
     filesProcessed++;
     char* input = fileQueue->pop();
     char* fileName = GetFileNameFromPath(input);
-    void* data;
     uint8_t* dataU8;
     uint64_t numFrames;
     uint64_t numChannels;
     uint64_t sampleRate;
     int audioType;
-    int fileSize;
-    // Optimized file reading. Mapping files allows reading them as a buffer without
-    // needing to allocate a buffer and copy the data in.
-#if defined (_WIN32)
-    HANDLE hFile = CreateFileA(input, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    HANDLE hMap = CreateFileMappingA(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
-    data = MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0);
-    CloseHandle(hMap);
-    LARGE_INTEGER size;
-    GetFileSizeEx(hFile, &size);
-    CloseHandle(hFile);
-    fileSize = size.QuadPart;
-#elif defined(__linux__)
-    int fd = open(input, O_RDONLY);
-    struct stat st;
-    fstat(fd, &st);
-    fileSize = st.st_size;
-    data = mmap(nullptr,st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    close(fd);
-#endif
+
+    MappedFile file(input, ReadOnly | OpenExisting);
+    void* data = file.GetData();
+    size_t fileSize = file.GetSize();
+
     dataU8 = (uint8_t*)data;
 
     // Read file header to determine which library needs to process it
@@ -380,25 +342,18 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue, Archive* a) {
         ov_clear(&vf);
     }
     else {
-        goto end;
+        return;
     }
-    // Must be scoped due to goto statement
-    {
-        CreateSampleXml(fileName, audioTypeToStr[audioType], numFrames, numChannels, a);
+    CreateSampleXml(fileName, audioTypeToStr[audioType], numFrames, numChannels, a);
+    CopySampleData(input, fileName, a);
 
-        CopySampleData(input, fileName, a);
-
-        // Fill in sound font XML
-        auto fontXmlPath = CreateFontXml(fileName, sampleRate, numChannels, a);
-        // There is no good way to determine the length of the song when we go to load it so we need to store the length in seconds.
-        float lengthF = (float)numFrames / (float)sampleRate;
-        lengthF = ceilf(lengthF);
-        unsigned int length = static_cast<unsigned int>(lengthF);
-        CreateSequenceXml(fileName, fontXmlPath.get(), length, a);
-    }
-end:
-
-    UnmapFile(data, fileSize);
+    // Fill in sound font XML
+    auto fontXmlPath = CreateFontXml(fileName, sampleRate, numChannels, a);
+    // There is no good way to determine the length of the song when we go to load it so we need to store the length in seconds.
+    float lengthF = (float)numFrames / (float)sampleRate;
+    lengthF = ceilf(lengthF);
+    unsigned int length = static_cast<unsigned int>(lengthF);
+    CreateSequenceXml(fileName, fontXmlPath.get(), length, a);
     }
 }
 
@@ -451,7 +406,12 @@ static void PackFilesMgrWorker(SafeQueue<char*>* fileQueue, bool* threadStarted,
     for (unsigned int i = 0; i < numThreads; i++) {
         packFileThreads[i].join();
     }
-    a->CloseArchive();
+
+    if (thisx->GetRadioState() != 0) {
+        a->CloseArchive();
+        delete a;
+    }
+
     *threadStarted = false;
     *threadDone = true;
 }
@@ -536,8 +496,6 @@ void CustomStreamedAudioWindow::DrawWindow() {
         ImGui::TextUnformatted("Packing files...");
         ImGui::Text("Files processed %d\\%d", filesProcessed.load(), fileCount);
     }
-
-
 
     if (mSavePath != nullptr) {
         ImGui::SameLine();

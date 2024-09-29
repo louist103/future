@@ -9,7 +9,7 @@
 #include <condition_variable>
 
 enum DataHandleMode : uint8_t {
-    MappedFile,
+    MMappedFile,
     DataCopy,
 };
 

@@ -168,7 +168,7 @@ void ZipArchive::WriteFileUnlocked(char* path, const ArchiveDataInfo* data) {
         mCopiedData.push_back(copy);
         break;
     }
-    case MappedFile: {
+    case MMappedFile: {
         // To avoid copying file data we can create a memory map of a file to add.
         // We still must maintain a pointer to this data but it avoids copies.
         // We will also unmap these in the destructor.
