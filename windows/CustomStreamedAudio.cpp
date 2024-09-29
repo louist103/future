@@ -28,7 +28,6 @@
 
 #if defined (_WIN32)
 #include <Windows.h>
-#include <shlwapi.h>
 #elif defined (__linux__)
 #include <fcntl.h>
 #include <unistd.h>
@@ -470,6 +469,16 @@ char* CustomStreamedAudioWindow::GetSavePath() {
     return mSavePath;
 }
 
+static bool FillFileCallback(char* path) {
+    char* ext = strrchr(path, '.');
+    if (ext != nullptr) {
+        if (ext != NULL && (strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, ".flac") == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void CustomStreamedAudioWindow::DrawWindow() {
     ImGui::Begin("Create Custom Streamed Audio", nullptr, ImGuiWindowFlags_NoDecoration);
     ImGui::SetWindowSize(ImGui::GetMainViewport()->Size);
@@ -491,7 +500,7 @@ void CustomStreamedAudioWindow::DrawWindow() {
         ClearPathBuff();
         ClearSaveBuff();
         GetOpenDirPath(&mPathBuff);
-        FillFileQueue();
+        FillFileQueue(mFileQueue, mPathBuff, FillFileCallback);
         fileCount = mFileQueue.size();
         mThreadIsDone = false;
     }
@@ -586,80 +595,4 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
         ImGui::Text("%s", &mFileQueue[i][basePathLen + 1]);
     }
     ImGui::EndChild();
-}
-
-void CustomStreamedAudioWindow::FillFileQueue() {
-#ifdef _WIN32
-    char oldWorkingDir[MAX_PATH];
-    char oldWorkingDir2[MAX_PATH];
-    GetCurrentDirectoryA(MAX_PATH, oldWorkingDir);
-    bool ret = SetCurrentDirectoryA(mPathBuff);
-    GetCurrentDirectoryA(MAX_PATH, oldWorkingDir2);
-    WIN32_FIND_DATAA ffd;
-    HANDLE h = FindFirstFileA("*", &ffd);
-    
-    do {
-        if (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-            char* ext = PathFindExtensionA(ffd.cFileName);
-
-            // Check for any standard N64 rom file extensions.
-            if (ext != NULL && (strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, ".flac") == 0) {
-                size_t s1 = strlen(ffd.cFileName);
-                size_t s2 = strlen(mPathBuff);
-                size_t sizeToAlloc = s1 + s2 + 2;
-
-                char* fullPath = new char[sizeToAlloc];
-                snprintf(fullPath, sizeToAlloc, "%s\\%s", mPathBuff, ffd.cFileName);
-                mFileQueue.push(fullPath);
-            }
-        }
-    } while (FindNextFileA(h, &ffd) != 0);
-    FindClose(h);
-    SetCurrentDirectoryA(oldWorkingDir);
-#elif unix
-    // Change the current working directory to the path selected.
-    char oldWorkingDir[PATH_MAX];
-    getcwd(oldWorkingDir, PATH_MAX);
-    chdir(mPathBuff);
-    DIR* d = opendir(".");
-
-    struct dirent* dir;
-
-    if (d != nullptr) {
-        // Go through each file in the directory
-        while ((dir = readdir(d)) != nullptr) {
-            struct stat path;
-
-            // Check if current entry is not folder
-            stat(dir->d_name, &path);
-            if (S_ISREG(path.st_mode)) {
-
-                // Get the position of the extension character.
-                char* ext = strrchr(dir->d_name, '.');
-                if (ext == nullptr) continue;
-                if ((strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, ".flac") == 0) {
-                    size_t s1 = strlen(dir->d_name);
-                    size_t s2 = strlen(mPathBuff);
-                    size_t sizeToAlloc = s1 + s2 + 2;
-
-                    char* fullPath = new char[sizeToAlloc];
-                    
-                    snprintf(fullPath, sizeToAlloc, "%s%s", mPathBuff, dir->d_name);
-                    mFileQueue.push(fullPath);
-                }
-            }
-        }
-    }
-    closedir(d);
-    chdir(oldWorkingDir);
-#else
-    for (const auto& file : std::filesystem::directory_iterator("./")) {
-        if (file.is_directory())
-            continue;
-        if ((file.path().extension() == ".wav") || (file.path().extension() == ".ogg") ||
-            (file.path().extension() == ".mp3") || file.path().extension() == ".flac") {
-            mFileQueue.push(strdup((file.path().string().c_str()));
-        }
-    }
-#endif
 }

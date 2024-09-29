@@ -15,7 +15,6 @@ private:
     void DrawPendingFilesList();
     void ClearPathBuff();
     void ClearSaveBuff();
-    void FillFileQueue();
     SafeQueue<char*> mFileQueue;
     char* mPathBuff = nullptr;
     char* mSavePath = nullptr;
