@@ -20,6 +20,10 @@ public:
   ~SafeQueue(void)
   {}
 
+  void push_back(T t) {
+      push(t);
+  }
+
   // Add an element to the queue.
   void push(T t)
   {

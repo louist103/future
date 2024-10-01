@@ -66,7 +66,7 @@ static void FillFileQueue(T& dest, char* mBasePath, ExtCheckCallback cb) {
 
                 char* fullPath = new char[sizeToAlloc];
                 snprintf(fullPath, sizeToAlloc, "%s\\%s", mBasePath, ffd.cFileName);
-                dest.push(fullPath);
+                dest.push_back(fullPath);
             }
         }
     } while (FindNextFileA(h, &ffd) != 0);
