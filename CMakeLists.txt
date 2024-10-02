@@ -106,9 +106,6 @@ endif()
 
 
 add_executable(future ${ALL_FILES})
-#target_link_libraries(future ${LIBS})
-add_compile_options(-fsanitize=address)
-target_link_options(future PRIVATE -fsanitize=address)
 
 include(FetchContent)
 FetchContent_Declare(
@@ -142,10 +139,6 @@ target_link_libraries(future PRIVATE "${OGG_LIB}")
 
 find_library(VORBISFILE_LIB vorbisfile)
 target_link_libraries(future PRIVATE "${VORBISFILE_LIB}")
-
-#find_library(TINYXML_LIB tinyxml2)
-#target_link_libraries(future PRIVATE "${TINYXML_LIB}")
-
 
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 
