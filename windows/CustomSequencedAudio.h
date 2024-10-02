@@ -3,6 +3,7 @@
 
 #include "WindowBase.h"
 #include <vector>
+#include <cstdint>
 
 typedef enum CheckState : uint8_t {
     Unchecked,

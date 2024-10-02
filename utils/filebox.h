@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <stdio.h>
+#include <cstring>
 
 #if defined (_WIN32)
 #include <Windows.h>
@@ -101,7 +102,7 @@ static void FillFileQueue(T& dest, char* mBasePath, ExtCheckCallback cb) {
                     char* fullPath = new char[sizeToAlloc];
 
                     snprintf(fullPath, sizeToAlloc, "%s%s", mBasePath, dir->d_name);
-                    dest.push(fullPath);
+                    dest.push_back(fullPath);
                 }
             }
         }
@@ -114,7 +115,7 @@ static void FillFileQueue(T& dest, char* mBasePath, ExtCheckCallback cb) {
             continue;
         if ((file.path().extension() == ".wav") || (file.path().extension() == ".ogg") ||
             (file.path().extension() == ".mp3") || file.path().extension() == ".flac") {
-            dest.push(strdup((file.path().string().c_str()));
+            dest.push_back(strdup((file.path().string().c_str()));
         }
     }
 #endif

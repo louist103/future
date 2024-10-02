@@ -26,7 +26,7 @@
 #include <atomic>
 #include <cmath>
 
-#include "MappedFile.h"
+#include "mio.hpp"
 
 CustomStreamedAudioWindow::CustomStreamedAudioWindow() {
 
@@ -99,14 +99,11 @@ static void CopySampleData(char* input, char* fileName, Archive* a) {
         CopyFileData(input, sampleDataPath.get());
     }
     else {
-        void* data;
-        size_t fileSize;
-        MappedFile mappedFile(input, ReadOnly | OpenExisting);
-        data = mappedFile.GetData();
-        fileSize = mappedFile.GetSize();
-        mappedFile.Release();
+        mio::mmap_source seqFile(input);
+        seqFile.release();
+    
         const ArchiveDataInfo info = {
-            .data = data, .size = fileSize, .mode = MMappedFile
+            .data = (void*)seqFile.data(), .size = seqFile.size(), .mode = MMappedFile
         };
         a->WriteFile(sampleDataPath.get(), &info);
     }
@@ -142,7 +139,7 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
     std::unique_ptr<char[]> sampleXmlPath = std::make_unique<char[]>(samplePathLen);
     snprintf(sampleXmlPath.get(), samplePathLen, "%s%s_SAMPLE.xml", sampleXmlBase, fileName);
     root->Accept(&p);
-
+    
     WriteFileData(sampleXmlPath.get(), (void*)p.CStr(), p.CStrSize() - 1, a);
 
     p.ClearBuffer();
@@ -297,9 +294,10 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue, Archive* a) {
     uint64_t sampleRate;
     int audioType;
 
-    MappedFile file(input, ReadOnly | OpenExisting);
-    void* data = file.GetData();
-    size_t fileSize = file.GetSize();
+    mio::mmap_source file(input);
+
+    void* data = (void*)file.data();
+    size_t fileSize = file.size();
 
     dataU8 = (uint8_t*)data;
 

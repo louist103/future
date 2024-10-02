@@ -4,6 +4,7 @@
 #include "archive.h"
 #include "stdlib.h"
 #include "zip.h"
+#include "mio.hpp"
 
 typedef struct MappedFileInfo {
     void* data;

@@ -6,11 +6,11 @@
 #include "archive.h"
 #include "zip_archive.h"
 #include "mpq_archive.h"
-#include "MappedFile.h"
 #include <algorithm>
 #include <thread>
 #include <sstream>
 #include <vector>
+#include "mio.hpp"
 
 CustomSequencedAudioWindow::CustomSequencedAudioWindow() {
 
@@ -127,8 +127,10 @@ static void PackFilesMgrWorker(std::vector<std::pair<char*, char*>>* fileQueue, 
         char buffer[260];
         char name[260];
         FILE* metaFile = fopen(p.first, "r");
-        MappedFile seqFile(p.second, ReadOnly | OpenExisting);
-        size_t SeqSize = seqFile.GetSize();
+
+        mio::mmap_source seqFile(p.second);
+        size_t SeqSize = seqFile.size();
+        
         // The .meta file always follows a structure of:
         // line 1: Friendly name
         // line 2: SoundFont Index
@@ -160,7 +162,7 @@ static void PackFilesMgrWorker(std::vector<std::pair<char*, char*>>* fileQueue, 
         std::stringstream stream;
         stream.write((const char*)&header, sizeof(header));
         stream.write((const char*)&SeqSize, 4);
-        stream.write((const char*)seqFile.GetData(), seqFile.GetSize());
+        stream.write((const char*)seqFile.data(), seqFile.size());
         stream.write((const char*)&ZERO, 1);
         stream.write((const char*)&TWO, 1);
         stream.write((const char*)&TWO, 1);
