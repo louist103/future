@@ -352,6 +352,8 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue, Archive* a) {
     lengthF = ceilf(lengthF);
     unsigned int length = static_cast<unsigned int>(lengthF);
     CreateSequenceXml(fileName, fontXmlPath.get(), length, a);
+    // the file name is allocated on the heap. We must free it here.
+    delete[] input;
     }
 }
 
@@ -547,8 +549,9 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
             ImGui::NewLine();
             continue;
         }
-        size_t basePathLen = strlen(mPathBuff);
-        ImGui::Text("%s", &mFileQueue[i][basePathLen + 1]);
+        char* fileName = strrchr(mFileQueue[i], '/');
+        fileName++;
+        ImGui::Text("%s", fileName);
     }
     ImGui::EndChild();
 }

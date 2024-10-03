@@ -154,8 +154,9 @@ void CreateFromDirWindow::DrawPendingFilesList() {
             ImGui::NewLine();
             continue;
         }
-        size_t basePathLen = strlen(mPathBuff);
-        ImGui::Text("%s", &s[basePathLen + 1]);
+        char* fileName = strrchr(s, '/');
+        fileName++;
+        ImGui::Text("%s", fileName);
     }
     ImGui::EndChild();
 }
