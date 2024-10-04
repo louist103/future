@@ -3,6 +3,7 @@
 
 #include "WindowBase.h"
 #include "threadSafeQueue.h"
+#include <unordered_map>
 
 class CustomStreamedAudioWindow : public WindowBase {
 public:
@@ -15,7 +16,9 @@ private:
     void DrawPendingFilesList();
     void ClearPathBuff();
     void ClearSaveBuff();
+    void FillFanfareMap();
     SafeQueue<char*> mFileQueue;
+    std::unordered_map<char*, bool> mFanfareMap;
     char* mPathBuff = nullptr;
     char* mSavePath = nullptr;
     unsigned int fileCount = 0;

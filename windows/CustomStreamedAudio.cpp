@@ -37,6 +37,24 @@ CustomStreamedAudioWindow::~CustomStreamedAudioWindow() {
         delete[] mFileQueue[i];
     }
     mFileQueue.clear();
+    ClearPathBuff();
+    ClearSaveBuff();
+}
+
+void CustomStreamedAudioWindow::ClearPathBuff()
+{
+    if (mPathBuff != nullptr) {
+        delete[] mPathBuff;
+        mPathBuff = nullptr;
+    }
+}
+
+void CustomStreamedAudioWindow::ClearSaveBuff()
+{
+    if (mSavePath != nullptr) {
+        delete[] mSavePath;
+        mSavePath = nullptr;
+    }
 }
 
 enum AudioType {
@@ -145,7 +163,7 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
     p.ClearBuffer();
 }
 
-static void CreateSequenceXml(char* fileName, char* fontPath, unsigned int length, Archive* a) {
+static void CreateSequenceXml(char* fileName, char* fontPath, unsigned int length, bool isFanfare, Archive* a) {
     constexpr static const char fontXmlBase[] = "custom/music/";
     tinyxml2::XMLDocument seqBaseRoot;
     tinyxml2::XMLError e = seqBaseRoot.LoadFile("assets/seq-base.xml");
@@ -169,9 +187,20 @@ static void CreateSequenceXml(char* fileName, char* fontPath, unsigned int lengt
         fontIndiciesElement->InsertEndChild(fontIdxElement);
     }
     root->SetAttribute("Length", length);
+    std::unique_ptr<char[]> seqXmlPath;
     size_t seqPathLen = sizeof(fontXmlBase) + strlen(fileName) + sizeof("_SEQ.xml");
-    auto seqXmlPath = std::make_unique<char[]>(seqPathLen);
-    snprintf(seqXmlPath.get(), seqPathLen, "%s%s_SEQ.xml", fontXmlBase, fileName);
+    if (!isFanfare) {
+        root->SetAttribute("Looped", true);
+        seqXmlPath = std::make_unique<char[]>(seqPathLen);
+        snprintf(seqXmlPath.get(), seqPathLen, "%s%s_SEQ.xml", fontXmlBase, fileName);
+    } else {
+        // By default the game will loop streamed sequences. Tell the game to NOT loop songs used as fanfares.
+        root->SetAttribute("Looped", false);
+        seqPathLen += sizeof("_fanfare");
+        seqXmlPath = std::make_unique<char[]>(seqPathLen);
+        snprintf(seqXmlPath.get(), seqPathLen, "%s%s_SEQ.xml_fanfare", fontXmlBase, fileName);
+    }
+    seqBaseRoot.InsertEndChild(root);
     root->Accept(&p);
 
     WriteFileData(seqXmlPath.get(), (void*)p.CStr(), p.CStrSize() - 1, a);
@@ -283,11 +312,12 @@ static const ov_callbacks cbs = {
 // `atomic` variables will ensure there isn't any inconsistency due to multi-threading.
 static std::atomic<unsigned int> filesProcessed = 0;
 
-static void ProcessAudioFile(SafeQueue<char*>* fileQueue, Archive* a) {
+static void ProcessAudioFile(SafeQueue<char*>* fileQueue, std::unordered_map<char*, bool>* fanfareMap, Archive* a) {
     while (!fileQueue->empty()) {
     filesProcessed++;
     char* input = fileQueue->pop();
-    char* fileName = GetFileNameFromPath(input);
+    char* fileName = strrchr(input, '/');
+    fileName++;
     uint8_t* dataU8;
     uint64_t numFrames;
     uint64_t numChannels;
@@ -351,30 +381,13 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue, Archive* a) {
     float lengthF = (float)numFrames / (float)sampleRate;
     lengthF = ceilf(lengthF);
     unsigned int length = static_cast<unsigned int>(lengthF);
-    CreateSequenceXml(fileName, fontXmlPath.get(), length, a);
+    CreateSequenceXml(fileName, fontXmlPath.get(), length, (*fanfareMap).at(fileName), a);
     // the file name is allocated on the heap. We must free it here.
     delete[] input;
     }
 }
 
-void CustomStreamedAudioWindow::ClearPathBuff()
-{
-    if (mPathBuff != nullptr) {
-        delete[] mPathBuff;
-        mPathBuff = nullptr;
-    }
-}
-
-void CustomStreamedAudioWindow::ClearSaveBuff()
-{
-    if (mSavePath != nullptr) {
-        delete[] mSavePath;
-        mSavePath = nullptr;
-    }
-}
-
-
-static void PackFilesMgrWorker(SafeQueue<char*>* fileQueue, bool* threadStarted, bool* threadDone, CustomStreamedAudioWindow* thisx) {
+static void PackFilesMgrWorker(SafeQueue<char*>* fileQueue, std::unordered_map<char*, bool>* fanfareMap, bool* threadStarted, bool* threadDone, CustomStreamedAudioWindow* thisx) {
     Archive* a = nullptr;
     // 0 means don't create an archive and instead move the files into folders
     if (thisx->GetRadioState() == 0) {
@@ -400,7 +413,7 @@ static void PackFilesMgrWorker(SafeQueue<char*>* fileQueue, bool* threadStarted,
     const unsigned int numThreads = std::thread::hardware_concurrency();
     auto packFileThreads = std::make_unique<std::thread[]>(numThreads);
     for (unsigned int i = 0; i < numThreads; i++) {
-        packFileThreads[i] = std::thread(ProcessAudioFile, fileQueue, a);
+        packFileThreads[i] = std::thread(ProcessAudioFile, fileQueue, fanfareMap, a);
     }
 
     for (unsigned int i = 0; i < numThreads; i++) {
@@ -461,6 +474,7 @@ void CustomStreamedAudioWindow::DrawWindow() {
         ClearSaveBuff();
         GetOpenDirPath(&mPathBuff);
         FillFileQueue(mFileQueue, mPathBuff, FillFileCallback);
+        FillFanfareMap();
         fileCount = mFileQueue.size();
         mThreadIsDone = false;
     }
@@ -508,23 +522,26 @@ void CustomStreamedAudioWindow::DrawWindow() {
                 mThreadStarted = true;
                 mThreadIsDone = false;
                 filesProcessed = 0;
-                std::thread packFilesMgrThread(PackFilesMgrWorker, &mFileQueue, &mThreadStarted, &mThreadIsDone, this);
+                std::thread packFilesMgrThread(PackFilesMgrWorker, &mFileQueue, &mFanfareMap, &mThreadStarted, &mThreadIsDone, this);
                 packFilesMgrThread.detach();
             }
         }
     }
 
     ImGui::EndDisabled();
-    
-    //if (mThreadStarted) {
-    //    ImGui::Text("Packing archive. Progress: %.0f %%", mProgress * 100.0);
-    //}
 
     DrawPendingFilesList();
 
-
-
     ImGui::End();
+}
+
+void CustomStreamedAudioWindow::FillFanfareMap() {
+    mFanfareMap.clear();
+    for (size_t i = 0; i < mFileQueue.size(); i++) {
+        char* fileName = strrchr(mFileQueue[i], '/');
+        fileName++;
+        mFanfareMap[fileName] = false;
+    }
 }
 
 void CustomStreamedAudioWindow::DrawPendingFilesList() {
@@ -551,7 +568,13 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
         }
         char* fileName = strrchr(mFileQueue[i], '/');
         fileName++;
+        size_t len = strlen(fileName);
+        auto checkboxTag = std::make_unique<char[]>(len + sizeof("Fanfare##") + 1);
+        sprintf(checkboxTag.get(), "Fanfare##%s", fileName);
         ImGui::Text("%s", fileName);
+        ImGui::SameLine();
+        ImGui::Checkbox(checkboxTag.get(), &mFanfareMap.at(fileName));
+        
     }
     ImGui::EndChild();
 }

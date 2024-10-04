@@ -18,7 +18,7 @@ ZipArchive::~ZipArchive() {
     }
 
     for (const auto m : mMemoryMaps) {
-        UnmapFile(m.data, 0);
+        UnmapFile(m.data, m.size);
     }
 
     files.clear();
