@@ -18,7 +18,11 @@ ZipArchive::~ZipArchive() {
     }
 
     for (const auto m : mMemoryMaps) {
+#if defined _WIN32
+        UnmapFile(m.data, 0);
+#else
         UnmapFile(m.data, m.size);
+#endif
     }
 
     files.clear();
