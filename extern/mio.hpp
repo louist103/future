@@ -180,7 +180,7 @@ private:
 
     // Allow the user 'release' this map to be unmapped after the object goes
     // out of scope.
-    bool is_released_;
+    bool is_released_ = false;
 
 public:
     /**
