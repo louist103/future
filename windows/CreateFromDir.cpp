@@ -154,7 +154,7 @@ void CreateFromDirWindow::DrawPendingFilesList() {
             ImGui::NewLine();
             continue;
         }
-        char* fileName = strrchr(s, '/');
+        char* fileName = strrchr(s, PATH_SEPARATOR);
         fileName++;
         ImGui::Text("%s", fileName);
     }

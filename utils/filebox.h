@@ -7,7 +7,9 @@
 
 #if defined (_WIN32)
 #include <Windows.h>
+constexpr const char PATH_SEPARATOR = '\\';
 #elif defined (__linux__)
+constexpr const char PATH_SEPARATOR = '/';
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>

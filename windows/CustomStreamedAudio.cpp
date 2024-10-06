@@ -316,7 +316,7 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue, std::unordered_map<cha
     while (!fileQueue->empty()) {
     filesProcessed++;
     char* input = fileQueue->pop();
-    char* fileName = strrchr(input, '/');
+    char* fileName = strrchr(input, PATH_SEPARATOR);
     fileName++;
     uint8_t* dataU8;
     uint64_t numFrames;
@@ -538,7 +538,7 @@ void CustomStreamedAudioWindow::DrawWindow() {
 void CustomStreamedAudioWindow::FillFanfareMap() {
     mFanfareMap.clear();
     for (size_t i = 0; i < mFileQueue.size(); i++) {
-        char* fileName = strrchr(mFileQueue[i], '/');
+        char* fileName = strrchr(mFileQueue[i], PATH_SEPARATOR);
         fileName++;
         mFanfareMap[fileName] = false;
     }
@@ -566,7 +566,7 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
             ImGui::NewLine();
             continue;
         }
-        char* fileName = strrchr(mFileQueue[i], '/');
+        char* fileName = strrchr(mFileQueue[i], PATH_SEPARATOR);
         fileName++;
         size_t len = strlen(fileName);
         auto checkboxTag = std::make_unique<char[]>(len + sizeof("Fanfare##") + 1);
