@@ -25,12 +25,15 @@ private:
     std::vector<char*> mFileQueue;
     // first is the meta file, second is the sequence
     std::vector<std::pair<char*, char*>> mFilePairs;
+    std::vector<char*> mMMRSFiles;
     char* mPathBuff = nullptr;
     char* mSavePath = nullptr;
     unsigned int fileCount = 0;
     int mRadioState = 2;
     bool mThreadStarted = false;
     bool mThreadIsDone = false;
+    bool mMMRSThreadStarted = false;
+    bool mMMRSThreadIsDone = false;
     bool mPackAsArchive = false;
     CheckState pairCheckState = CheckState::Unchecked;
 };

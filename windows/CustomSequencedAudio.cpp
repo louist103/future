@@ -11,6 +11,7 @@
 #include <sstream>
 #include <vector>
 #include "mio.hpp"
+#include "tinyxml2.h"
 
 CustomSequencedAudioWindow::CustomSequencedAudioWindow() {
 
@@ -39,7 +40,7 @@ void CustomSequencedAudioWindow::ClearSaveBuff()
     }
 }
 
-static bool FillFileCallback(char* path) {
+static bool FillSeqFileCallback(char* path) {
     char* ext = strrchr(path, '.');
     if (ext != nullptr) {
         if ((strcmp(ext, ".seq") == 0 || strcmp(ext, ".aseq") == 0 || strcmp(ext, ".meta") == 0)) {
@@ -47,6 +48,26 @@ static bool FillFileCallback(char* path) {
         }
     }
     return false;
+}
+
+static bool FillMMRSFileCallback(char* path) {
+    char* ext = strrchr(path, '.');
+    if (ext != nullptr) {
+        return strcmp(ext, ".mmrs") == 0;
+    }
+    return false;
+}
+
+static bool IsSeqExt(const char* ext) {
+    return strcmp(ext, ".zseq") == 0 || strcmp(ext, ".aseq") == 0 || strcmp(ext, ".seq") == 0;
+}
+
+static bool IsFontExt(const char* ext) {
+    return strcmp(ext, ".zbank") == 0;
+}
+
+static bool IsNoteExt(const char* ext) {
+    return strcmp(ext, ".zsound") == 0;
 }
 
 void CustomSequencedAudioWindow::CreateFilePairs() {
@@ -87,6 +108,21 @@ void CustomSequencedAudioWindow::CreateFilePairs() {
     pairCheckState = CheckState::Good;
 }
 
+// Write `data` to either the archive, or if the archive is null, a file on disk
+static void WriteFileData(char* path, void* data, size_t size, Archive* a) {
+    if (a == nullptr) {
+        FILE* file = fopen(path, "wb+");
+        fwrite(data, size, 1, file);
+        fclose(file);
+    }
+    else {
+        const ArchiveDataInfo info = {
+            .data = data, .size = size, .mode = DataCopy
+        };
+        a->WriteFile(path, &info);
+    }
+}
+
 typedef struct OTRHeader {
     uint8_t endianness;
     uint8_t padding_1[3];
@@ -100,7 +136,7 @@ typedef struct OTRHeader {
 }OTRHeader;
 
 static void PackFilesMgrWorker(std::vector<std::pair<char*, char*>>* fileQueue, bool* threadStarted, bool* threadDone, CustomSequencedAudioWindow* thisx) {
-    Archive* a = nullptr;
+    std::unique_ptr<Archive> a;
     constexpr const char PATH_BASE[] = "custom/music";
     // 0 means don't create an archive and instead move the files into folders
     if (thisx->GetRadioState() == 0) {
@@ -109,11 +145,11 @@ static void PackFilesMgrWorker(std::vector<std::pair<char*, char*>>* fileQueue, 
     else {
         switch (thisx->GetRadioState()) {
         case 1: {
-            a = new MpqArchive(thisx->GetSavePath());
+            a = std::make_unique<MpqArchive>(thisx->GetSavePath());
             break;
         }
         case 2: {
-            a = new ZipArchive(thisx->GetSavePath());
+            a = std::make_unique<ZipArchive>(thisx->GetSavePath());
             break;
         }
         }
@@ -152,12 +188,11 @@ static void PackFilesMgrWorker(std::vector<std::pair<char*, char*>>* fileQueue, 
             .romCrc = 0,
             .romEnum = 0,
         };
-        
-        
+
         size_t outFileNameLen = strlen(name);
         name[outFileNameLen - 1] = 0;
-        char* newName = new char[outFileNameLen + sizeof(PATH_BASE)];
-        snprintf(newName, outFileNameLen + sizeof(PATH_BASE), "%s/%s", PATH_BASE, name);
+        auto newName = std::make_unique<char[]>(outFileNameLen + sizeof(PATH_BASE));
+        snprintf(newName.get(), outFileNameLen + sizeof(PATH_BASE), "%s/%s", PATH_BASE, name);
 
         std::stringstream stream;
         stream.write((const char*)&header, sizeof(header));
@@ -172,26 +207,117 @@ static void PackFilesMgrWorker(std::vector<std::pair<char*, char*>>* fileQueue, 
         char* rawData = new char[stream.tellp()];
         stream.read(rawData, stream.tellp());
 
-        if (thisx->GetRadioState() == 0) {
-            FILE* outFile = fopen(newName, "wb+");
-            fwrite(rawData, stream.tellp(), 1, outFile);
-            fclose(outFile);
-        }
-        else {
-            ArchiveDataInfo info = { .data = (void*)rawData, .size = (size_t)stream.tellp(), .mode = DataHandleMode::DataCopy};
-            a->WriteFile(newName, &info);
-        }
-        delete[] rawData;
+        WriteFileData(newName.get(), rawData, stream.tellg(), a.get());
     }
-    //const unsigned int numThreads = std::thread::hardware_concurrency();
-    //auto packFileThreads = std::make_unique<std::thread[]>(numThreads);
-    //for (unsigned int i = 0; i < numThreads; i++) {
-    //    packFileThreads[i] = std::thread(ProcessAudioFile, fileQueue, a);
-    //}
-    //
-    //for (unsigned int i = 0; i < numThreads; i++) {
-    //    packFileThreads[i].join();
-    //}
+
+    if (thisx->GetRadioState() != 0) {
+        a->CloseArchive();
+    }
+    *threadStarted = false;
+    *threadDone = true;
+}
+
+static void PackMMRSFilesMgrWorker(std::vector<char*>* fileQueue, bool* threadStarted, bool* threadDone, CustomSequencedAudioWindow* thisx) {
+    std::unique_ptr<Archive> a;
+    constexpr const char PATH_BASE[] = "custom/music/";
+    constexpr static const char seqDataBase[] = "custom/sequenceData/";
+
+    // 0 means don't create an archive and instead move the files into folders
+    if (thisx->GetRadioState() == 0) {
+        CreateDir(PATH_BASE);
+        CreateDir(seqDataBase);
+    }
+    else {
+        switch (thisx->GetRadioState()) {
+        case 1: {
+            a = std::make_unique<MpqArchive>(thisx->GetSavePath());
+            break;
+        }
+        case 2: {
+            a = std::make_unique<ZipArchive>(thisx->GetSavePath());
+            break;
+        }
+        }
+    }
+
+    for (auto f : *fileQueue) {
+        zip_t* mmrsFile = zip_open(f, ZIP_RDONLY, nullptr);
+        int numFiles = zip_get_num_entries(mmrsFile, ZIP_FL_UNCHANGED);
+        char* seqPath = nullptr;
+        char* fontPath = nullptr;
+        char* notePath = nullptr;
+
+        for (int i = 0; i < numFiles; i++) {
+            const char* file = zip_get_name(mmrsFile, i, ZIP_FL_ENC_RAW);
+            const char* ext = strrchr(file, '.');
+            if (IsSeqExt(ext)) {
+                seqPath = const_cast<char*>(file);
+            }
+            else if (IsFontExt(ext)) {
+                fontPath = const_cast<char*>(file);
+            }
+            else if (IsNoteExt(ext)) {
+                notePath = const_cast<char*>(file);
+            }
+        }
+        if (seqPath == nullptr) {
+            printf("No sequence found in archive %s. Skipping...\n", f);
+            zip_close(mmrsFile);
+            continue;
+        }
+        char* seqPathExt = strrchr(seqPath, '.');
+        int fontIdx = strtol(seqPath, &seqPathExt, 16);
+        if (fontPath != nullptr || notePath != nullptr) {
+            printf("Only sequences are supported right now. : %s\n", f);
+            zip_close(mmrsFile);
+            continue;
+        }
+        // We don't need the extension anymore so remove it.
+        char* mmrsExt = strrchr(f, '.');
+        *mmrsExt = 0;
+        // Remote the beginning of the path which may include the disk and \ from the FS.
+        // We don't want to replace `f` because the pointer needs to stay the same so we can delete it later.
+        char* name = strrchr(f, PATH_SEPARATOR);
+        name++;
+        zip_stat_t stat;
+        zip_stat(mmrsFile, seqPath, 0, &stat);
+        void* seqData = malloc(stat.size);
+        zip_file_t* seqZipFile = zip_fopen(mmrsFile, seqPath, 0);
+        zip_fread(seqZipFile, seqData, stat.size);
+        zip_fclose(seqZipFile);
+
+        tinyxml2::XMLPrinter p;
+        tinyxml2::XMLDocument seqDoc;
+        seqDoc.LoadFile("assets/seq-base.xml");
+
+        tinyxml2::XMLElement* root = seqDoc.FirstChildElement();
+        root->SetAttribute("Size", (uint64_t)stat.size);
+        root->SetAttribute("Streamed", false);
+        // Write the font index
+        tinyxml2::XMLElement* fontIndiciesElement = root->FirstChildElement("FontIndicies");
+        tinyxml2::XMLElement* fontIdxElement = fontIndiciesElement->InsertNewChildElement("FontIndex");
+        fontIdxElement->SetAttribute("FontIdx", fontIdx);
+        fontIndiciesElement->InsertEndChild(fontIdxElement);
+
+        // Write the raw sequence data.
+        size_t seqDataZipPathLen = sizeof(seqDataBase) + strlen(name) + sizeof("_RAW") + 1;
+        auto seqDataZipPath = std::make_unique<char[]>(seqDataZipPathLen);
+        snprintf(seqDataZipPath.get(), seqDataZipPathLen, "%s%s_RAW", seqDataBase, name);
+        WriteFileData(seqDataZipPath.get(), seqData, stat.size, a.get());
+
+        // Write the path to the raw sequence data to the META xml file.
+        root->SetAttribute("Path", seqDataZipPath.get());
+        seqDoc.InsertEndChild(root);
+        seqDoc.Accept(&p);
+
+        // Write the META xml file.
+        size_t seqXMLZipPathLen = sizeof(PATH_BASE) + strlen(name) + sizeof("_META") + 1;
+        auto seqXMLZipPath = std::make_unique<char[]>(seqXMLZipPathLen);
+        snprintf(seqXMLZipPath.get(), seqXMLZipPathLen, "%s%s_META", PATH_BASE, name);
+        WriteFileData(seqXMLZipPath.get(), (void*)p.CStr(), p.CStrSize(), a.get());
+        zip_close(mmrsFile);
+    }
+
     if (thisx->GetRadioState() != 0) {
         a->CloseArchive();
     }
@@ -230,7 +356,8 @@ void CustomSequencedAudioWindow::DrawWindow() {
         ClearPathBuff();
         ClearSaveBuff();
         GetOpenDirPath(&mPathBuff);
-        FillFileQueue(mFileQueue, mPathBuff, FillFileCallback);
+        FillFileQueue(mFileQueue, mPathBuff, FillSeqFileCallback);
+        FillFileQueue(mMMRSFiles, mPathBuff, FillMMRSFileCallback);
         CreateFilePairs();
 
         fileCount = mFileQueue.size();
@@ -264,7 +391,7 @@ void CustomSequencedAudioWindow::DrawWindow() {
         }
     }
 
-    if (mThreadStarted && !mThreadIsDone) {
+    if ((mThreadStarted && !mThreadIsDone) || (mMMRSThreadStarted && !mMMRSThreadIsDone)) {
         ImGui::TextUnformatted("Packing files...");
         //ImGui::Text("Files processed %d\\%d", filesProcessed.load(), fileCount);
     }
@@ -274,13 +401,15 @@ void CustomSequencedAudioWindow::DrawWindow() {
         ImGui::Text("Archive save path: %s", mSavePath);
     }
 
-    if (!mFilePairs.empty() && pairCheckState == CheckState::Good && mPathBuff != nullptr) {
+    if ((!mFilePairs.empty() && pairCheckState == CheckState::Good) || (!mMMRSFiles.empty()) && mPathBuff != nullptr) {
         if (!mPackAsArchive || (mPackAsArchive && mSavePath != nullptr)) {
             if (ImGui::Button("Pack Archive")) {
                 mThreadStarted = true;
                 mThreadIsDone = false;
                 std::thread packFilesMgrThread(PackFilesMgrWorker, &mFilePairs, &mThreadStarted, &mThreadIsDone, this);
+                std::thread packMMRSFilesMgrThread(PackMMRSFilesMgrWorker, &mMMRSFiles, &mMMRSThreadStarted, &mMMRSThreadIsDone, this);
                 packFilesMgrThread.detach();
+                packMMRSFilesMgrThread.detach();
             }
         }
     }
@@ -291,14 +420,22 @@ void CustomSequencedAudioWindow::DrawWindow() {
 }
 
 void CustomSequencedAudioWindow::DrawPendingFilesList() {
-    ImGui::BeginTable("Pending Sequences", 2);
-
-    for (const auto& p : mFilePairs) {
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        ImGui::Text("%s", p.first);
-        ImGui::TableSetColumnIndex(1);
-        ImGui::Text("%s", p.second);
+    if (!mFilePairs.empty()) {
+        ImGui::BeginTable("Pending Sequences", 2);
+        ImGui::TextUnformatted("OOTR Sequences:");
+        for (const auto& p : mFilePairs) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("%s", p.first);
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("%s", p.second);
+        }
+        ImGui::EndTable();
     }
-    ImGui::EndTable();
+    if (!mMMRSFiles.empty()) {
+        ImGui::TextUnformatted("MMR Sequences");
+        for (const auto& f : mMMRSFiles) {
+            ImGui::Text("%s", f);
+        }
+    }
 }
