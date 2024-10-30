@@ -25,7 +25,7 @@ private:
     int mRadioState = 2;
     bool mThreadStarted = false;
     bool mThreadIsDone = false;
-    bool mPackAsArchive = false;
+    bool mPackAsArchive = true;
 };
 
 #endif
