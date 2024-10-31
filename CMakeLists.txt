@@ -137,8 +137,14 @@ target_link_libraries(future PRIVATE OpenGL::GL)
 find_library(OGG_LIB ogg)
 target_link_libraries(future PRIVATE "${OGG_LIB}")
 
+find_library(VORBIS_LIB vorbis)
+target_link_libraries(future PRIVATE "${VORBIS_LIB}")
+
 find_library(VORBISFILE_LIB vorbisfile)
 target_link_libraries(future PRIVATE "${VORBISFILE_LIB}")
+
+find_library(VORBISENC_LIB vorbisenc)
+target_link_libraries(future PRIVATE "${VORBISENC_LIB}")
 
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 
