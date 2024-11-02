@@ -399,10 +399,11 @@ typedef struct ChannelInfo {
     size_t channelSizes[2];
 } ChannelInfo;
 
-static void SplitOgg(OggVorbis_File* vf, ChannelInfo* info, uint64_t sampleRate, uint64_t numFrames) {
+static void SplitOgg(ChannelInfo* info, std::unique_ptr<float[]> channels[2], uint64_t sampleRate, uint64_t numFrames, size_t fileSize) {
     MemoryBuffer outBuffer[2];
-    init_memory_buffer(&outBuffer[0], (1024 * 1024) * 5);
-    init_memory_buffer(&outBuffer[1], (1024 * 1024) * 5);
+    // fileSize will likely always be larger than the original file but it will never need to reallocate the buffer.
+    init_memory_buffer(&outBuffer[0], fileSize);
+    init_memory_buffer(&outBuffer[1], fileSize);
     ogg_stream_state os[2];
     ogg_page og[2];
     ogg_packet op[2];
@@ -414,8 +415,6 @@ static void SplitOgg(OggVorbis_File* vf, ChannelInfo* info, uint64_t sampleRate,
     ogg_packet header_comm[2];
     ogg_packet header_code[2];
     for (size_t i = 0; i < 2; i++) {
-        int eos = 0;
-
         vorbis_info_init(&outInfo[i]);
         vorbis_encode_init_vbr(&outInfo[i], 1, sampleRate, 0.6f);
         vorbis_analysis_init(&vd[i], &outInfo[i]);
@@ -429,7 +428,7 @@ static void SplitOgg(OggVorbis_File* vf, ChannelInfo* info, uint64_t sampleRate,
         ogg_stream_packetin(&os[i], &header_comm[i]);
         ogg_stream_packetin(&os[i], &header_code[i]);
 
-        while (!eos) {
+        while (true) {
             int result = ogg_stream_flush(&os[i], &og[i]);
             if (result == 0)break;
             write_to_buffer(&outBuffer[i], og[i].header, og[i].header_len);
@@ -437,21 +436,20 @@ static void SplitOgg(OggVorbis_File* vf, ChannelInfo* info, uint64_t sampleRate,
         }
     }
 
-
-    float** pcm;
-    int bitStream;
     size_t pos = 0;
-    long read = 0;
-    
+    size_t read = 0;
     do {
-        float** bufferL = vorbis_analysis_buffer(&vd[0], 4096);
-        float** bufferR = vorbis_analysis_buffer(&vd[1], 4096);
-        read = ov_read_float(vf, &pcm, 4096, &bitStream);
-
+        float** bufferL = vorbis_analysis_buffer(&vd[0], 1024);
+        float** bufferR = vorbis_analysis_buffer(&vd[1], 1024);
+        if (pos + 1024 > numFrames) {
+            read = numFrames - pos;
+        } else {
+            read = 1024;
+        }
         if (read > 0) {
             // Avoid memcpy if pcm data can be used directly
-            memcpy(bufferL[0], pcm[0], read * 4);
-            memcpy(bufferR[0], pcm[1], read * 4);
+            memcpy(bufferL[0], &channels[0].get()[pos], read * 4);
+            memcpy(bufferR[0], &channels[1].get()[pos], read * 4);
             
             vorbis_analysis_wrote(&vd[0], read);
             vorbis_analysis_wrote(&vd[1], read);
@@ -564,6 +562,21 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue, std::unordered_map<cha
         numChannels = mp3.channels;
         sampleRate = mp3.sampleRate;
         numFrames = drmp3_get_pcm_frame_count(&mp3);
+        if (numChannels == 2) {
+            audioType = AudioType::ogg;
+            auto sampleData = std::make_unique<float[]>(numFrames * numChannels);
+            drmp3_read_pcm_frames_f32(&mp3, numFrames, sampleData.get());
+            std::unique_ptr<float[]> channels[2];
+            channels[0] = std::make_unique<float[]>(numFrames);
+            channels[1] = std::make_unique<float[]>(numFrames);
+            size_t pos = 0;
+            for (size_t i = 0; i < numFrames * numChannels - 1; i += 2, pos++) {
+                channels[0].get()[pos] = sampleData.get()[i];
+                channels[1].get()[pos] = sampleData.get()[i + 1];
+            }
+            SplitOgg(&infos, channels, sampleRate, numFrames, fileSize);
+        }
+
     } else if (WAV_CHECK(dataU8)) {
         drwav wav;
         audioType = AudioType::wav;
@@ -612,6 +625,7 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue, std::unordered_map<cha
         char dataBuff[4096];
         long read = 0;
         size_t pos = 0;
+        std::unique_ptr<float[]> channels[2];
 
         audioType = AudioType::ogg;
         OggVorbis_File vf;
@@ -627,9 +641,20 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue, std::unordered_map<cha
         numFrames = ov_pcm_total(&vf, -1);
         sampleRate = vi->rate;
         numChannels = vi->channels;
+        channels[0] = std::make_unique<float[]>(numFrames);
+        channels[1] = std::make_unique<float[]>(numFrames);
+
+        do {
+            float** pcm;
+            int bitStream;
+            read = ov_read_float(&vf, &pcm, 4096, &bitStream);
+            memcpy(&channels[0].get()[pos], pcm[0], read * sizeof(float));
+            memcpy(&channels[1].get()[pos], pcm[1], read * sizeof(float));
+            pos += read;
+        } while (read > 0);
 
         if (numChannels == 2) {
-            SplitOgg(&vf, &infos, sampleRate, numFrames);
+            SplitOgg(&infos, channels, sampleRate, numFrames, fileSize);
         }
     }
     else {
