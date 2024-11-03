@@ -5,6 +5,12 @@
 #include "threadSafeQueue.h"
 #include <unordered_map>
 
+typedef struct SeqMetaInfo {
+    float loopStart = 0.0f;
+    float loopEnd = 0.0f;
+    bool fanfare;
+} SeqMetaInfo;
+
 class CustomStreamedAudioWindow : public WindowBase {
 public:
     CustomStreamedAudioWindow();
@@ -18,7 +24,7 @@ private:
     void ClearSaveBuff();
     void FillFanfareMap();
     SafeQueue<char*> mFileQueue;
-    std::unordered_map<char*, bool> mFanfareMap;
+    std::unordered_map<char*, SeqMetaInfo> mSeqMetaMap;
     char* mPathBuff = nullptr;
     char* mSavePath = nullptr;
     unsigned int fileCount = 0;

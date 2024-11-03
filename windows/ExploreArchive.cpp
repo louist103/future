@@ -9,12 +9,12 @@
 #include "zip_archive.h"
 #include "mpq_archive.h"
 #if defined (_WIN32)
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #elif defined (__linux__)
 #include <fcntl.h>
 #include <unistd.h>
 #endif
-//#include <immintrin.h>
 
 ExploreWindow::ExploreWindow() {
     // ImGui::InputText can't handle a null buffer being passed in.
