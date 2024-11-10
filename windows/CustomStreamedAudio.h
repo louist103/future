@@ -5,9 +5,14 @@
 #include "threadSafeQueue.h"
 #include <unordered_map>
 
+typedef union IntFloat {
+    float f;
+    uint32_t i;
+} IntFloat;
+
 typedef struct SeqMetaInfo {
-    float loopStart = 0.0f;
-    float loopEnd = 0.0f;
+    IntFloat loopStart;
+    IntFloat loopEnd;
     bool fanfare;
 } SeqMetaInfo;
 
@@ -18,10 +23,12 @@ public:
     void DrawWindow();
     int GetRadioState();
     char* GetSavePath();
+    bool GetLoopTimeType();
 private:
     void DrawPendingFilesList();
     void ClearPathBuff();
     void ClearSaveBuff();
+    void ClearFanfareMap();
     void FillFanfareMap();
     SafeQueue<char*> mFileQueue;
     std::unordered_map<char*, SeqMetaInfo> mSeqMetaMap;
@@ -32,6 +39,7 @@ private:
     bool mThreadStarted = false;
     bool mThreadIsDone = false;
     bool mPackAsArchive = true;
+    bool mLoopIsISamples = false;
 };
 
 #endif

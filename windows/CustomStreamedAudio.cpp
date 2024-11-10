@@ -91,16 +91,6 @@ constexpr static std::array<const char*, 4> audioTypeToStr = {
     "flac",
 };
 
-static char* GetFileNameFromPath(char* input) {
-    size_t len = strlen(input);
-    for (size_t i = len; i > 0; i--) {
-        if (input[i] == '/' || input[i] == '\\') {
-            return &input[i + 1];
-        }
-    }
-    return nullptr;
-}
-
 // Write `data` to either the archive, or if the archive is null, a file on disk
 static void WriteFileData(char* path, void* data, size_t size, Archive* a) {
     if (a == nullptr) {
@@ -138,7 +128,7 @@ static void CopySampleData(char* input, char* fileName, bool fromDisk, size_t si
     }
 }
 
-static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numFrames, uint64_t numChannels, SeqMetaInfo* info, uint64_t sampleRate, Archive* a) {
+static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numFrames, uint64_t numChannels, SeqMetaInfo* info, uint64_t sampleRate, bool loopTimeInSamples, Archive* a) {
     tinyxml2::XMLDocument sampleBaseRoot;
     tinyxml2::XMLError e = sampleBaseRoot.LoadFile("assets/sample-base.xml");
     if (e != 0) {
@@ -160,18 +150,36 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
     if (!info->fanfare) {
         root->SetAttribute("LoopCount", "-1");
     }
-    if (info->loopStart != 0) {
-        
-        uint64_t loopStartSample = info->loopStart * sampleRate * numChannels;
-        if (loopStartSample > numFrames * numChannels) {
-            loopStartSample = 0;
+    if (info->loopStart.i != 0) {
+        uint64_t loopStartSample;
+        if (loopTimeInSamples) {
+            loopStartSample = info->loopStart.i;
+            if (info->loopStart.i > numFrames * numChannels) {
+                loopStartSample = 0;
+            }
+        } else {
+            loopStartSample = info->loopStart.f * sampleRate * numChannels;
+            if (loopStartSample > numFrames * numChannels) {
+                loopStartSample = 0;
+            }
         }
         root->SetAttribute("LoopStart", loopStartSample);
     }
-    if (info->loopEnd != 0) {
-        uint64_t loopEndSample = info->loopEnd * sampleRate * numChannels;
-        if (loopEndSample > numFrames * numChannels) {
-            loopEndSample = numFrames * numChannels;
+    if (info->loopEnd.i != 0) {
+        uint64_t loopEndSample;
+        if (loopTimeInSamples) {
+            if (info->loopEnd.i > numFrames * numChannels) {
+                loopEndSample = numFrames * numChannels;
+            }
+            else {
+                loopEndSample = info->loopEnd.i;
+            }
+        }
+        else {
+            loopEndSample = info->loopEnd.f * sampleRate * numChannels;
+            if (loopEndSample > numFrames * numChannels) {
+                loopEndSample = numFrames * numChannels;
+            }
         }
         root->SetAttribute("LoopEnd", loopEndSample);
     }
@@ -541,7 +549,7 @@ static void WriteWavData(int16_t* l, int16_t* r, ChannelInfo* info, uint64_t num
     drwav_uninit(&outWav);
 }
 
-static void ProcessAudioFile(SafeQueue<char*>* fileQueue, std::unordered_map<char*, SeqMetaInfo>* seqMetaMap, Archive* a) {
+static void ProcessAudioFile(SafeQueue<char*>* fileQueue, std::unordered_map<char*, SeqMetaInfo>* seqMetaMap, bool loopTimeInSamples, Archive* a) {
     while (!fileQueue->empty()) {
     filesProcessed++;
     char* input = fileQueue->pop();
@@ -684,16 +692,16 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue, std::unordered_map<cha
 
     std::unique_ptr<char[]> fontXmlPath;
     if (numChannels == 2) {
-        CreateSampleXml(fileNames[0].get(), audioTypeToStr[audioType], numFrames, 1, &seqMetaMap->at(fileName), sampleRate, a);
+        CreateSampleXml(fileNames[0].get(), audioTypeToStr[audioType], numFrames, 1, &seqMetaMap->at(fileName), sampleRate, loopTimeInSamples, a);
         CopySampleData(reinterpret_cast<char*>(infos.channelData[0]), fileNames[0].get(), false, infos.channelSizes[0], a);
 
-        CreateSampleXml(fileNames[1].get(), audioTypeToStr[audioType], numFrames, 1, &seqMetaMap->at(fileName), sampleRate, a);
+        CreateSampleXml(fileNames[1].get(), audioTypeToStr[audioType], numFrames, 1, &seqMetaMap->at(fileName), sampleRate, loopTimeInSamples, a);
         CopySampleData(reinterpret_cast<char*>(infos.channelData[1]), fileNames[1].get(), false, infos.channelSizes[1], a);
         fontXmlPath = CreateFontMultiXml(fileNames, fileName, sampleRate, a);
         free(infos.channelData[0]);
         free(infos.channelData[1]);
     } else {
-        CreateSampleXml(fileName, audioTypeToStr[audioType], numFrames, numChannels, &seqMetaMap->at(fileName), sampleRate, a);
+        CreateSampleXml(fileName, audioTypeToStr[audioType], numFrames, numChannels, &seqMetaMap->at(fileName), sampleRate, loopTimeInSamples, a);
         CopySampleData(input, fileName, true, fileSize, a);
         fontXmlPath = CreateFontXml(fileName, sampleRate, numChannels, a);
     }
@@ -723,7 +731,7 @@ static void PackFilesMgrWorker(SafeQueue<char*>* fileQueue, std::unordered_map<c
     const unsigned int numThreads = std::thread::hardware_concurrency();
     auto packFileThreads = std::make_unique<std::thread[]>(numThreads);
     for (unsigned int i = 0; i < numThreads; i++) {
-        packFileThreads[i] = std::thread(ProcessAudioFile, fileQueue, fanfareMap, a);
+        packFileThreads[i] = std::thread(ProcessAudioFile, fileQueue, fanfareMap, thisx->GetLoopTimeType(), a);
     }
 
     for (unsigned int i = 0; i < numThreads; i++) {
@@ -748,6 +756,11 @@ int CustomStreamedAudioWindow::GetRadioState() {
 
 char* CustomStreamedAudioWindow::GetSavePath() {
     return mSavePath;
+}
+
+bool CustomStreamedAudioWindow::GetLoopTimeType()
+{
+    return mLoopIsISamples;
 }
 
 static bool FillFileCallback(char* path) {
@@ -840,9 +853,25 @@ void CustomStreamedAudioWindow::FillFanfareMap() {
     for (size_t i = 0; i < mFileQueue.size(); i++) {
         char* fileName = strrchr(mFileQueue[i], PATH_SEPARATOR);
         fileName++;
-        mSeqMetaMap[fileName].fanfare = false;;
+        mSeqMetaMap[fileName].fanfare = false;
+        mSeqMetaMap[fileName].loopStart.i = 0;
+        mSeqMetaMap[fileName].loopEnd.i = 0;
     }
 }
+
+void CustomStreamedAudioWindow::ClearFanfareMap() {
+    for (auto& m : mSeqMetaMap) {
+        m.second.loopEnd.i = 0;
+        m.second.loopStart.i = 0;
+        m.second.loopEnd.f = 0.0f;
+        m.second.loopStart.f = 0.0f;
+    }
+}
+
+static constexpr std::array<const char*, 2> loopToggleLabels = {
+    "Loop Times in Seconds",
+    "Loop Times in Samples",
+};
 
 void CustomStreamedAudioWindow::DrawPendingFilesList() {
     if (mFileQueue.empty()) {
@@ -852,14 +881,32 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
     const ImVec2 cursorPos = ImGui::GetCursorPos();
     const ImVec2 windowSize = ImGui::GetWindowSize();
     const ImVec2 childWindowSize = { windowSize.x - cursorPos.x, windowSize.y - cursorPos.y };
-    const ImVec2 fiveCharsWidth = ImGui::CalcTextSize("00000");
-    ImGui::BeginChild("File List", childWindowSize, 0, 0);
+    const ImVec2 fiveCharsWidth = ImGui::CalcTextSize("00000000");
+    const ImVec2 labelWidth = ImGui::CalcTextSize(loopToggleLabels[0]);
     ImGui::TextUnformatted("Files to Pack:");
+
     const float windowHeight = ImGui::GetWindowHeight();
     float maxLen = 0;
     for (size_t i = 0; i < mFileQueue.size(); i++) {
         maxLen = std::max(maxLen, ImGui::CalcTextSize(strrchr(mFileQueue[i], PATH_SEPARATOR)).x);
     }
+    ImGui::SameLine();
+    if (ImGui::Toggle(loopToggleLabels[mLoopIsISamples], &mLoopIsISamples)) {
+        FillFanfareMap();
+    }
+    float totalPadding = maxLen;
+    if (labelWidth.x >   maxLen) {
+        totalPadding += labelWidth.x;
+    }
+    ImGui::SameLine(totalPadding);
+    ImGui::TextUnformatted("Loop Start");
+    ImGui::SameLine();
+    ImGui::TextUnformatted("LoopEnd");
+    ImGui::SameLine();
+    ImGui::TextUnformatted("Fanfare");
+
+    const ImGuiDataType type = mLoopIsISamples ? ImGuiDataType_S32 : ImGuiDataType_Float;
+    ImGui::BeginChild("File List", childWindowSize, 0, 0);
 
     for (size_t i = 0; i < mFileQueue.size(); i++) {
         const float scroll = ImGui::GetScrollY();
@@ -876,15 +923,15 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
         auto checkboxTag = std::make_unique<char[]>(len + sizeof("Fanfare##") + 1);
         auto loopStartTag = std::make_unique<char[]>(len + sizeof("Loop Start##") + 1);
         auto loopEndTag = std::make_unique<char[]>(len + sizeof("Loop End##") + 1);
-        sprintf(checkboxTag.get(), "Fanfare##%s", fileName);
-        sprintf(loopStartTag.get(), "Loop Start##%s", fileName);
-        sprintf(loopEndTag.get(), "Loop End##%s", fileName);
+        sprintf(checkboxTag.get(), "##ff%s", fileName);
+        sprintf(loopStartTag.get(), "##start%s", fileName);
+        sprintf(loopEndTag.get(), "##end%s", fileName);
         ImGui::Text("%s", fileName);       
         ImGui::PushItemWidth(fiveCharsWidth.x);
-        ImGui::SameLine(maxLen);
-        ImGui::InputScalarN(loopStartTag.get(), ImGuiDataType_Float, &mSeqMetaMap.at(fileName).loopStart, 1);
+        ImGui::SameLine(totalPadding);
+        ImGui::InputScalarN(loopStartTag.get(), type, &mSeqMetaMap.at(fileName).loopStart, 1);
         ImGui::SameLine();
-        ImGui::InputScalarN(loopEndTag.get(), ImGuiDataType_Float, &mSeqMetaMap.at(fileName).loopEnd, 1);
+        ImGui::InputScalarN(loopEndTag.get(), type, &mSeqMetaMap.at(fileName).loopEnd, 1);
         ImGui::SameLine();
         ImGui::PopItemWidth();
         ImGui::Checkbox(checkboxTag.get(), &mSeqMetaMap.at(fileName).fanfare);
