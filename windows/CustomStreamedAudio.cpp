@@ -894,16 +894,26 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
     if (ImGui::Toggle(loopToggleLabels[mLoopIsISamples], &mLoopIsISamples)) {
         FillFanfareMap();
     }
-    float totalPadding = maxLen;
-    if (labelWidth.x >   maxLen) {
-        totalPadding += labelWidth.x;
-    }
-    ImGui::SameLine(totalPadding);
+    float totalPadding = maxLen + labelWidth.x + fiveCharsWidth.x;
+    //if (labelWidth.x >   maxLen) {
+    //    totalPadding += labelWidth.x;
+    //}
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + totalPadding);
+    ImGui::SameLine();
+    const float startPos = ImGui::GetCursorPosX();
     ImGui::TextUnformatted("Loop Start");
     ImGui::SameLine();
+    const float endPos = ImGui::GetCursorPosX();
     ImGui::TextUnformatted("LoopEnd");
     ImGui::SameLine();
+    const float fanfarePos = ImGui::GetCursorPosX();
     ImGui::TextUnformatted("Fanfare");
+    ImGui::SameLine();
+    const float fanfareEndPos = ImGui::GetCursorPosX();
+    // The checkbox will draw at the position specified. To draw the center of the box in the center of the text, start drawing the box at the 1/3 point of the text.
+    const float fanfareDiff = (fanfareEndPos - fanfarePos);
+    const float fanfareStartPos = (fanfareDiff * .33f) + fanfarePos;
+    ImGui::NewLine();
 
     const ImGuiDataType type = mLoopIsISamples ? ImGuiDataType_S32 : ImGuiDataType_Float;
     ImGui::BeginChild("File List", childWindowSize, 0, 0);
@@ -927,13 +937,16 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
         sprintf(loopStartTag.get(), "##start%s", fileName);
         sprintf(loopEndTag.get(), "##end%s", fileName);
         ImGui::Text("%s", fileName);       
-        ImGui::PushItemWidth(fiveCharsWidth.x);
         ImGui::SameLine(totalPadding);
+        ImGui::SetCursorPosX(startPos);
+        ImGui::PushItemWidth(fiveCharsWidth.x);
         ImGui::InputScalarN(loopStartTag.get(), type, &mSeqMetaMap.at(fileName).loopStart, 1);
         ImGui::SameLine();
+        ImGui::SetCursorPosX(endPos);
         ImGui::InputScalarN(loopEndTag.get(), type, &mSeqMetaMap.at(fileName).loopEnd, 1);
         ImGui::SameLine();
         ImGui::PopItemWidth();
+        ImGui::SetCursorPosX(fanfareStartPos);
         ImGui::Checkbox(checkboxTag.get(), &mSeqMetaMap.at(fileName).fanfare);
         
     }

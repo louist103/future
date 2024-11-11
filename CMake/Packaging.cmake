@@ -69,9 +69,13 @@ endif()
 
 execute_process(
   COMMAND
+  cp -r assets/ ${CPACK_TEMPORARY_DIRECTORY}/
+
+  COMMAND
     ${CMAKE_COMMAND} -E env
       OUTPUT=${CPACK_PACKAGE_FILE_NAME}.appimage
       VERSION=$<IF:$<BOOL:${CPACK_PACKAGE_VERSION}>,${CPACK_PACKAGE_VERSION},0.1.0>
+
     ${LINUXDEPLOY_EXECUTABLE}
     --appimage-extract-and-run
     --appdir=${CPACK_TEMPORARY_DIRECTORY}

@@ -60,11 +60,32 @@ int main(int, char**)
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
     //ImGui::StyleColorsLight();
-
     bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    float ddpi;
+    float hdpi;
+    float vdpi;
+    SDL_GetDisplayDPI(0, &ddpi, &hdpi, &vdpi);
+    ImGui::GetStyle().ScaleAllSizes(ddpi / 96.0f);
+
+    #if defined (_WIN32)
     io.Fonts->AddFontFromFileTTF("assets/Roboto-Medium.ttf", 32.0f);
+    #elif defined (__linux__)
+    // Get the path of the mounted app image and build the font path from there. Is this better than just embedding the font into the binary?
+    char* appDir = getenv("APPDIR");
+
+    if (appDir != nullptr) {
+        printf("$APPDIR %s\n", appDir);
+        int fontPathLen = snprintf(nullptr, 0, "%s/assets/Roboto-Medium.ttf", appDir);
+        std::unique_ptr<char[]> fontPath = std::make_unique<char[]>(fontPathLen + 2);
+        snprintf(fontPath.get(), fontPathLen + 1, "%s/assets/Roboto-Medium.ttf", appDir);
+        printf("FONT %d %s\n",fontPathLen, fontPath.get());
+        io.Fonts->AddFontFromFileTTF(fontPath.get(), 32.0f);
+    } else {
+        io.Fonts->AddFontFromFileTTF("assets/Roboto-Medium.ttf", 32.0f);
+    }
+    #endif
 
     gWindowMgr.SetCurWindow(WindowId::Main);
     gWindowMgr.ProcessWindowChange();
