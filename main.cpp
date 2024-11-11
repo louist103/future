@@ -63,11 +63,6 @@ int main(int, char**)
     bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-    float ddpi;
-    float hdpi;
-    float vdpi;
-    SDL_GetDisplayDPI(0, &ddpi, &hdpi, &vdpi);
-    ImGui::GetStyle().ScaleAllSizes(ddpi / 96.0f);
 
     #if defined (_WIN32)
     io.Fonts->AddFontFromFileTTF("assets/Roboto-Medium.ttf", 32.0f);
@@ -172,6 +167,12 @@ static int InitState() {
         // Setup Platform/Renderer backends
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
+
+    float ddpi;
+    float hdpi;
+    float vdpi;
+    SDL_GetDisplayDPI(0, &ddpi, &hdpi, &vdpi);
+    ImGui::GetStyle().ScaleAllSizes(ddpi / 96.0f);
 
 #elif defined(_WIN32)
     // Create application window
