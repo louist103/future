@@ -30,7 +30,7 @@ private:
     void ClearSaveBuff();
     void ClearFanfareMap();
     void FillFanfareMap();
-    SafeQueue<char*> mFileQueue;
+    std::vector<char*> mFileQueue;
     std::unordered_map<char*, SeqMetaInfo> mSeqMetaMap;
     char* mPathBuff = nullptr;
     char* mSavePath = nullptr;

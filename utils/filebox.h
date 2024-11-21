@@ -46,7 +46,8 @@ typedef bool (*ExtCheckCallback)(char*);
 // Fills a container of files in directory `mBasePath` filtered by extension.
 // Extensions are filtered by the callback. The callback takes the full path and is
 // responsible for getting the extension.
-// dest can be any container that has the `push` function implemented
+// dest can be any container that has the `push` function implemented.
+// Caller is responsible for freeing the paths. Must be freed with `operator delete[]`
 template <class T>
 static void FillFileQueue(T& dest, char* mBasePath, ExtCheckCallback cb) {
 #ifdef _WIN32
@@ -60,15 +61,13 @@ static void FillFileQueue(T& dest, char* mBasePath, ExtCheckCallback cb) {
 
     do {
         if (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-            char* ext = strrchr(ffd.cFileName, '.');
-
             // Check for any standard N64 rom file extensions.
             if (cb(ffd.cFileName)) {
                 size_t s1 = strlen(ffd.cFileName);
                 size_t s2 = strlen(mBasePath);
                 size_t sizeToAlloc = s1 + s2 + 2;
 
-                char* fullPath = new char[sizeToAlloc];
+                char* fullPath = (char*)operator new(sizeToAlloc, std::align_val_t(2));
                 snprintf(fullPath, sizeToAlloc, "%s\\%s", mBasePath, ffd.cFileName);
                 dest.push_back(fullPath);
             }
@@ -93,16 +92,12 @@ static void FillFileQueue(T& dest, char* mBasePath, ExtCheckCallback cb) {
             // Check if current entry is not folder
             stat(dir->d_name, &path);
             if (S_ISREG(path.st_mode)) {
-
-                // Get the position of the extension character.
-                char* ext = strrchr(dir->d_name, '.');
-                if (ext == nullptr) continue;
-                if ((strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, ".flac") == 0) {
+                if (cb(dir->d_name)) {
                     size_t s1 = strlen(dir->d_name);
                     size_t s2 = strlen(mBasePath);
                     size_t sizeToAlloc = s1 + s2 + 2;
 
-                    char* fullPath = new char[sizeToAlloc];
+                    char* fullPath = (char*)operator new[](sizeToAlloc, std::align_val_t(2)); //new char[sizeToAlloc];
 
                     snprintf(fullPath, sizeToAlloc, "%s%s", mBasePath, dir->d_name);
                     dest.push_back(fullPath);
@@ -118,7 +113,9 @@ static void FillFileQueue(T& dest, char* mBasePath, ExtCheckCallback cb) {
             continue;
         if ((file.path().extension() == ".wav") || (file.path().extension() == ".ogg") ||
             (file.path().extension() == ".mp3") || file.path().extension() == ".flac") {
-            dest.push_back(strdup((file.path().string().c_str()));
+                char* fullPath = (char*)operator new[](file.size(), std::align_val_t(2));
+                strcpy(fullPath, file.path().string().c_str());
+            dest.push_back(fullPath);
         }
     }
 #endif

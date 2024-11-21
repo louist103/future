@@ -19,7 +19,7 @@ CustomSequencedAudioWindow::CustomSequencedAudioWindow() {
 
 CustomSequencedAudioWindow::~CustomSequencedAudioWindow() {
     for (const auto c : mFileQueue) {
-        delete[] c;
+        operator delete[] (c);
     }
     mFileQueue.clear();
 }

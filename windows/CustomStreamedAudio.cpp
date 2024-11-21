@@ -34,11 +34,18 @@ CustomStreamedAudioWindow::CustomStreamedAudioWindow() {
 
 }
 
-CustomStreamedAudioWindow::~CustomStreamedAudioWindow() {
-    for (size_t i = 0; i < mFileQueue.size(); i++) {
-        delete[] mFileQueue[i];
+// Not part of the class because it needs to be accessed from a thread.
+static void ClearFileQueue(std::vector<char*>* fileQueue) {
+    for (auto f : *fileQueue) {
+        // The lowest bit of the path is set to 1 if the file has been processed. We need to undo that to delete it.
+        uintptr_t origPtr = (uintptr_t)f & (UINTPTR_MAX & (~1));
+        operator delete[]((char*)(origPtr));
     }
-    mFileQueue.clear();
+    fileQueue->clear();
+}
+
+CustomStreamedAudioWindow::~CustomStreamedAudioWindow() {
+    ClearFileQueue(&mFileQueue);
     ClearPathBuff();
     ClearSaveBuff();
 }
@@ -525,8 +532,6 @@ static void SplitOgg(ChannelInfo* info, std::unique_ptr<float[]> channels[2], ui
     info->channelSizes[1] = outBuffer[1].size;
 }
 
-
-
 static void WriteWavData(int16_t* l, int16_t* r, ChannelInfo* info, uint64_t numFrames, uint64_t sampleRate) {
     drwav outWav;
     size_t outDataSize = 0;
@@ -549,10 +554,10 @@ static void WriteWavData(int16_t* l, int16_t* r, ChannelInfo* info, uint64_t num
     drwav_uninit(&outWav);
 }
 
-static void ProcessAudioFile(SafeQueue<char*>* fileQueue, std::unordered_map<char*, SeqMetaInfo>* seqMetaMap, bool loopTimeInSamples, Archive* a) {
-    while (!fileQueue->empty()) {
-    filesProcessed++;
-    char* input = fileQueue->pop();
+static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<char*, SeqMetaInfo>* seqMetaMap, bool loopTimeInSamples, Archive* a) {
+    while (filesProcessed < fileQueue->size()) {
+    char** inputp = &(*fileQueue)[filesProcessed.fetch_add(1, std::memory_order_relaxed)];
+    char* input = *inputp;
     char* fileName = strrchr(input, PATH_SEPARATOR);
     fileName++;
     size_t fileNameLen = strlen(fileName);
@@ -710,20 +715,22 @@ static void ProcessAudioFile(SafeQueue<char*>* fileQueue, std::unordered_map<cha
     lengthF = ceilf(lengthF);
     unsigned int length = static_cast<unsigned int>(lengthF);
     CreateSequenceXml(fileName, fontXmlPath.get(), length, (*seqMetaMap).at(fileName).fanfare, numChannels == 2, a);
-    // the file name is allocated on the heap. We must free it here.
-    delete[] input;
+    // Since the function that allocates the paths allocates them 2 byte aligned, we can use the lowest bit as a signal that this file has been processed.
+    uintptr_t inputU = reinterpret_cast<uintptr_t>(*inputp);
+    inputU |= 1;
+    *inputp= (char*)inputU;
     }
 }
 
-static void PackFilesMgrWorker(SafeQueue<char*>* fileQueue, std::unordered_map<char*, SeqMetaInfo>* fanfareMap, bool* threadStarted, bool* threadDone, CustomStreamedAudioWindow* thisx) {
-    Archive* a = nullptr;
+static void PackFilesMgrWorker(std::vector<char*>* fileQueue, std::unordered_map<char*, SeqMetaInfo>* fanfareMap, bool* threadStarted, bool* threadDone, CustomStreamedAudioWindow* thisx) {
+    std::unique_ptr<Archive> a;
     switch (thisx->GetRadioState()) {
         case 1: {
-            a = new MpqArchive(thisx->GetSavePath());
+            a = std::make_unique<MpqArchive>(thisx->GetSavePath());
             break;
         }
         case 2: {
-            a = new ZipArchive(thisx->GetSavePath());
+            a = std::make_unique<ZipArchive>(thisx->GetSavePath());
             break;
         }
     }
@@ -731,16 +738,14 @@ static void PackFilesMgrWorker(SafeQueue<char*>* fileQueue, std::unordered_map<c
     const unsigned int numThreads = std::thread::hardware_concurrency();
     auto packFileThreads = std::make_unique<std::thread[]>(numThreads);
     for (unsigned int i = 0; i < numThreads; i++) {
-        packFileThreads[i] = std::thread(ProcessAudioFile, fileQueue, fanfareMap, thisx->GetLoopTimeType(), a);
+        packFileThreads[i] = std::thread(ProcessAudioFile, fileQueue, fanfareMap, thisx->GetLoopTimeType(), a.get());
     }
 
     for (unsigned int i = 0; i < numThreads; i++) {
         packFileThreads[i].join();
     }
-
+    ClearFileQueue(fileQueue);
     a->CloseArchive();
-    delete a;
-
     *threadStarted = false;
     *threadDone = true;
 }
@@ -792,9 +797,11 @@ void CustomStreamedAudioWindow::DrawWindow() {
 
     if (ImGui::Button("Select Directory")) {
         ClearPathBuff();
-        ClearSaveBuff();
         GetOpenDirPath(&mPathBuff);
         FillFileQueue(mFileQueue, mPathBuff, FillFileCallback);
+        std::sort(mFileQueue.begin(), mFileQueue.end(), [](char* a, char* b) {
+            return strcmp(a, b) < 0;
+        });
         FillFanfareMap();
         fileCount = mFileQueue.size();
         mThreadIsDone = false;
@@ -887,8 +894,10 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
 
     const float windowHeight = ImGui::GetWindowHeight();
     float maxLen = 0;
-    for (size_t i = 0; i < mFileQueue.size(); i++) {
-        maxLen = std::max(maxLen, ImGui::CalcTextSize(strrchr(mFileQueue[i], PATH_SEPARATOR)).x);
+    for (auto f : mFileQueue) {
+        if ((uintptr_t)f & 1 != 1) {
+            maxLen = std::max(maxLen, ImGui::CalcTextSize(strrchr(f, PATH_SEPARATOR)).x);
+        }
     }
     ImGui::SameLine();
     if (ImGui::Toggle(loopToggleLabels[mLoopIsISamples], &mLoopIsISamples)) {
@@ -916,9 +925,12 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
     ImGui::NewLine();
 
     const ImGuiDataType type = mLoopIsISamples ? ImGuiDataType_S32 : ImGuiDataType_Float;
-    ImGui::BeginChild("File List", childWindowSize, 0, 0);
+    ImGui::BeginChild("File List", {}, 0, 0);
 
-    for (size_t i = 0; i < mFileQueue.size(); i++) {
+    for (const auto s : mFileQueue) {
+        if ((uintptr_t)s & 1 == 1) {
+            continue;
+        }
         const float scroll = ImGui::GetScrollY();
         const float cursorPosY = ImGui::GetCursorPosY();
 
@@ -927,7 +939,7 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
             ImGui::NewLine();
             continue;
         }
-        char* fileName = strrchr(mFileQueue[i], PATH_SEPARATOR);
+        char* fileName = strrchr(s, PATH_SEPARATOR);
         fileName++;
         size_t len = strlen(fileName);
         auto checkboxTag = std::make_unique<char[]>(len + sizeof("Fanfare##") + 1);
