@@ -206,7 +206,7 @@ static void FillFileQueueImpl(std::vector<char*>& files, char* startPath, int ne
         }
     } while (FindNextFileA(h, &ffd) != 0);
     FindClose(h);
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     //I give up...
     size_t basePathLen = strlen(startPath);
     char buffer[PATH_MAX];

@@ -30,7 +30,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     file (GLOB future__imgui_backend
     extern/imgui/backends/imgui_impl_dx11.cpp
     extern/imgui/backends/imgui_impl_win32.cpp)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+elseif ((CMAKE_SYSTEM_NAME STREQUAL "Linux") OR (CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
     file (GLOB future__imgui_backend
     extern/imgui/backends/imgui_impl_sdl2.cpp
     extern/imgui/backends/imgui_impl_opengl3.cpp)
@@ -126,7 +126,7 @@ target_link_libraries(future PRIVATE libzip::zip )
 
 file (COPY assets/ DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/assets)
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if ((CMAKE_SYSTEM_NAME STREQUAL "Linux") OR (CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
 
 find_package(SDL2 REQUIRED)
 target_link_libraries(future PRIVATE SDL2::SDL2)

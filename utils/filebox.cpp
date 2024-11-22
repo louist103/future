@@ -7,7 +7,7 @@
 #include <shobjidl_core.h>
 #include <filesystem>
 extern HWND gHwnd;
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
 #include "portable-file-dialogs.h"
 #include "SDL2/SDL.h"
 #include <fcntl.h>
@@ -52,7 +52,7 @@ bool GetOpenDirPath(char** inputBuffer) {
         result->Release();
     }
     pfd->Release();
-#elif defined (__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     auto selection = pfd::select_folder("Open Directory").result();
 
     if (selection.empty()) {
@@ -113,7 +113,7 @@ bool GetOpenFilePath(char** inputBuffer, FileBoxType type) {
         result->Release();
     }
     pfd->Release();
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     //std::vector<std::string> filters;
     auto selection = pfd::open_file("Select a file", ".", { "All Supported Archives", "*.otr *.mpq *.o2r *.zip", "OTR Archives", "*.otr *.mpq", "O2R Archives", "*.o2r *.zip",}).result();
 
@@ -159,7 +159,7 @@ bool GetSaveFilePath(char** inputBuffer) {
         result->Release();
     }
     pfd->Release();
-#elif (__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     auto selection = pfd::save_file("Save File").result();
     size_t len = selection.length();
     if (*inputBuffer != nullptr){
@@ -214,7 +214,7 @@ size_t GetDiskFileSize(char* path) {
     // The std::fs function is faster on Windows but not linux.
 #if defined (_WIN32)
     return std::filesystem::file_size(path);
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     struct stat st;
     stat(path, &st);
     return (size_t)st.st_size;
@@ -226,7 +226,7 @@ size_t GetDiskFileSize(char* path) {
 int CopyFileData(char* src, char* dest) {
 #if defined (_WIN32)
     CopyFileA(src, dest, false);
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     int srcFd = open(src, O_RDONLY);
     struct stat st;
     fstat(srcFd, &st);
@@ -244,7 +244,7 @@ int CopyFileData(char* src, char* dest) {
 int CreateDir(const char* dir) {
 #if defined (_WIN32)
     CreateDirectoryA(dir, nullptr);
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     mkdir(dir, 0777);
 #endif
     return 0;
@@ -253,7 +253,7 @@ int CreateDir(const char* dir) {
 void UnmapFile(void* data, [[maybe_unused]] size_t size) {
 #if defined (_WIN32)
     UnmapViewOfFile(data);
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     munmap(data, size);
 #endif
 }

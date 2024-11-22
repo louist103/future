@@ -4,12 +4,13 @@
 #include <cstddef>
 #include <stdio.h>
 #include <cstring>
+#include <filesystem>
 
 #if defined (_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 constexpr const char PATH_SEPARATOR = '\\';
-#elif defined (__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
 constexpr const char PATH_SEPARATOR = '/';
 #include <fcntl.h>
 #include <unistd.h>
@@ -75,7 +76,7 @@ static void FillFileQueue(T& dest, char* mBasePath, ExtCheckCallback cb) {
     } while (FindNextFileA(h, &ffd) != 0);
     FindClose(h);
     SetCurrentDirectoryA(oldWorkingDir);
-#elif unix
+#elif defined(__linux__) || defined(__APPLE__)
     // Change the current working directory to the path selected.
     char oldWorkingDir[PATH_MAX];
     getcwd(oldWorkingDir, PATH_MAX);

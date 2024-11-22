@@ -7,7 +7,7 @@
 #include <d3d11.h>
 #pragma comment (lib, "d3d11.lib")
 #pragma comment (lib, "Dwmapi.lib")
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #include "imgui_impl_sdl2.h"
@@ -38,7 +38,7 @@ static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
 static ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
 static WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"Future", nullptr };
 HWND gHwnd;
-#elif __linux__
+#elif defined(__linux__) || defined(__APPLE__)
 static SDL_Window* window;
 static SDL_GLContext gl_context;
 #endif
@@ -66,7 +66,7 @@ int main(int, char**)
 
     #if defined (_WIN32)
     io.Fonts->AddFontFromFileTTF("assets/Roboto-Medium.ttf", 32.0f);
-    #elif defined (__linux__)
+    #elif defined(__linux__) || defined(__APPLE__)
     // Get the path of the mounted app image and build the font path from there. Is this better than just embedding the font into the binary?
     char* appDir = getenv("APPDIR");
 
@@ -112,7 +112,7 @@ int main(int, char**)
 // Helper functions
 
 static int InitState() {
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
         printf("Error: %s\n", SDL_GetError());
         return -1;
@@ -205,7 +205,7 @@ static void StartFrame() {
 #if defined(_WIN32)
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame();
 #endif
@@ -223,7 +223,7 @@ static bool HandleEvents() {
             rv = true;
     }
     return rv;
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         ImGui_ImplSDL2_ProcessEvent(&event);
@@ -248,7 +248,7 @@ static void Render(const ImVec4& clear_color) {
     HRESULT hr = g_pSwapChain->Present(1, 0);   // Present with vsync
     //HRESULT hr = g_pSwapChain->Present(0, 0); // Present without vsync
     g_SwapChainOccluded = (hr == DXGI_STATUS_OCCLUDED);
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     ImGui::Render();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
@@ -269,7 +269,7 @@ static void Shutdown() {
     CleanupDeviceD3D();
     ::DestroyWindow(gHwnd);
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();

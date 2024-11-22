@@ -26,6 +26,8 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <thread>
+#include <filesystem>
 
 #include "mio.hpp"
 #undef max

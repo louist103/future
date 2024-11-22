@@ -11,7 +11,7 @@
 #if defined (_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
-#elif defined (__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
 #include <fcntl.h>
 #include <unistd.h>
 #endif
@@ -160,7 +160,7 @@ bool ExploreWindow::ValidateInputFile() {
     }
 
     CloseHandle(inFile);
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     int fd;
     fd = open(mPathBuff, O_RDONLY);
     if (read(fd, &header, 4) != 4) {
