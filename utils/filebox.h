@@ -67,7 +67,7 @@ static void FillFileQueue(T& dest, char* mBasePath, ExtCheckCallback cb) {
                 size_t s2 = strlen(mBasePath);
                 size_t sizeToAlloc = s1 + s2 + 2;
 
-                char* fullPath = (char*)operator new(sizeToAlloc, std::align_val_t(2));
+                char* fullPath = (char*)operator new[](sizeToAlloc, std::align_val_t(2));
                 snprintf(fullPath, sizeToAlloc, "%s\\%s", mBasePath, ffd.cFileName);
                 dest.push_back(fullPath);
             }

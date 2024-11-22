@@ -38,8 +38,8 @@ CustomStreamedAudioWindow::CustomStreamedAudioWindow() {
 static void ClearFileQueue(std::vector<char*>* fileQueue) {
     for (auto f : *fileQueue) {
         // The lowest bit of the path is set to 1 if the file has been processed. We need to undo that to delete it.
-        uintptr_t origPtr = (uintptr_t)f & (UINTPTR_MAX & (~1));
-        operator delete[]((char*)(origPtr));
+        uintptr_t origPtr = (uintptr_t)f & (UINTPTR_MAX & (~(uintptr_t)1));
+        operator delete[]((void*)origPtr, std::align_val_t(2));
     }
     fileQueue->clear();
 }
