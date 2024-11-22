@@ -1,13 +1,18 @@
 #if defined (_WIN32)
 #include <D3d11.h>
-#elif defined(__linux__)
+#include <GL/gl.h>
+#else
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#endif
+#if defined(__linux__)
 #include <GL/gl.h>
+#elif defined(__APPLE__)
+#include <GL/glew.h>
+#endif
+#endif
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include <unordered_map>
@@ -50,7 +55,7 @@ static inline ID3D11ShaderResourceView* LoadTextureDX11(void* data, int width, i
     pTexture->Release();
     return view;
 }
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
 static inline GLuint LoadTextureGL(void* data, int width, int height) {
     GLuint image_texture;
     glGenTextures(1, &image_texture);
@@ -100,7 +105,7 @@ void* LoadTextureByName(const char* path, int* width, int* height) {
     CloseHandle(mappingObj);
     CloseHandle(hFile);
 
-    #elif defined(__linux__)
+    #elif defined(__linux__) || defined(__APPLE__)
     int fd;
     fd = open(path, O_RDONLY);
     if (fd < 0) {

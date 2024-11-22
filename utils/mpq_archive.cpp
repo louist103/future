@@ -1,8 +1,9 @@
 #include "mpq_archive.h"
 #include "filebox.h"
 #include <cstring>
+#include <filesystem>
 
-#if defined (__linux__) 
+#if defined(__linux__) || defined(__APPLE__)
 // Stormlib uses the windows error codes which linux doesn't have
 #define ERROR_FILE_EXISTS 0x80
 // MSVC throws an error saying strdup is deprecated. Linux doesn't have _strdup.

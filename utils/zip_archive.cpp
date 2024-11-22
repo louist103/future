@@ -145,7 +145,7 @@ void ZipArchive::RegisterProgressCallback(zip_progress_callback cb, void* callin
 
 #if defined (_WIN32)
 #define CREATE_MAPPED_INFO(data, size) {data}
-#elif defined (__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
 #define CREATE_MAPPED_INFO(data, size) {data, size}
 #endif
 
