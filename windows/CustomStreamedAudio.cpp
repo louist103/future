@@ -6,6 +6,7 @@
 #include "xml_embed.h"
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_toggle.h"
 #include "WindowMgr.h"
 #include "filebox.h"
@@ -781,7 +782,7 @@ static bool FillFileCallback(char* path) {
 }
 
 void CustomStreamedAudioWindow::DrawWindow() {
-    ImGui::Begin("Create Custom Streamed Audio", nullptr, ImGuiWindowFlags_NoDecoration);
+    ImGui::Begin("Create Custom Streamed Audio", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove);
     ImGui::SetWindowSize(ImGui::GetMainViewport()->Size);
     ImGui::SetWindowPos(ImGui::GetMainViewport()->Pos);
 
@@ -795,6 +796,8 @@ void CustomStreamedAudioWindow::DrawWindow() {
 
     ImGui::SameLine();
     ImGui::TextUnformatted("Create Archive With Streamed Songs");
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
+
     ImGui::TextUnformatted("Open a directory and create an archive with the files needed for streamed audio");
 
     if (ImGui::Button("Select Directory")) {

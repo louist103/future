@@ -14,6 +14,8 @@
 #include "imgui_impl_opengl3.h"
 #endif
 #include "zip.h"
+#include "font.h"
+#include "style.h"
 
 
 
@@ -58,29 +60,12 @@ int main(int, char**)
 
 
     // Setup Dear ImGui style
-    ImGui::StyleColorsDark();
-    //ImGui::StyleColorsLight();
+    SetupStyles();
     bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-    #if defined (_WIN32)
-    io.Fonts->AddFontFromFileTTF("assets/Roboto-Medium.ttf", 32.0f);
-    #elif defined(__linux__) || defined(__APPLE__)
-    // Get the path of the mounted app image and build the font path from there. Is this better than just embedding the font into the binary?
-    char* appDir = getenv("APPDIR");
-
-    if (appDir != nullptr) {
-        printf("$APPDIR %s\n", appDir);
-        int fontPathLen = snprintf(nullptr, 0, "%s/assets/Roboto-Medium.ttf", appDir);
-        std::unique_ptr<char[]> fontPath = std::make_unique<char[]>(fontPathLen + 2);
-        snprintf(fontPath.get(), fontPathLen + 1, "%s/assets/Roboto-Medium.ttf", appDir);
-        printf("FONT %d %s\n",fontPathLen, fontPath.get());
-        io.Fonts->AddFontFromFileTTF(fontPath.get(), 32.0f);
-    } else {
-        io.Fonts->AddFontFromFileTTF("assets/Roboto-Medium.ttf", 32.0f);
-    }
-    #endif
+    LoadFonts();
 
     gWindowMgr.SetCurWindow(WindowId::Main);
     gWindowMgr.ProcessWindowChange();
@@ -146,7 +131,7 @@ static int InitState() {
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-    window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+    window = SDL_CreateWindow("future", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
     if (window == nullptr)
     {
         printf("Error: SDL_CreateWindow(): %s\n", SDL_GetError());

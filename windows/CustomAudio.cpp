@@ -1,6 +1,9 @@
 #include "CustomAudio.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "WindowMgr.h"
+#include "style.h"
+#include "font.h"
 
 
 CustomAudioWindow::CustomAudioWindow() {
@@ -12,7 +15,7 @@ CustomAudioWindow::~CustomAudioWindow() {
 }
 
 void CustomAudioWindow::DrawWindow() {
-    ImGui::Begin("Custom Audio", nullptr, ImGuiWindowFlags_NoDecoration);
+    ImGui::Begin("Custom Audio", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove);
     ImGui::SetWindowSize(ImGui::GetMainViewport()->Size);
     ImGui::SetWindowPos(ImGui::GetMainViewport()->Pos);
 
@@ -23,22 +26,21 @@ void CustomAudioWindow::DrawWindow() {
 
     ImGui::SameLine();
     ImGui::TextUnformatted("Custom Audio");
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
 
     const ImVec2 windowSize = ImGui::GetWindowSize();
-    float smallerDim = std::min(windowSize.x, windowSize.y);
-    const ImVec2 windowSizeSq = { smallerDim, smallerDim };
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 50.0f);
-    if (ImGui::Button("Streamed", { windowSizeSq.x * .33f, windowSizeSq.y * .33f })) {
+    if (BigIconButton("Streamed", ICON_FA_FILE_AUDIO_O, (windowSize.x * .5f) - 45.0f)) {
         gWindowMgr.SetCurWindow(WindowId::CustomStreamedAudio);
     }
+
     ImGui::SameLine();
-    if (ImGui::Button("Sequenced", { windowSizeSq.x * .33f, windowSizeSq.y * .33f })) {
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical, 3.0f);
+    ImGui::SameLine();
+
+    if (BigIconButton("Sequenced", ICON_FA_FILE_CODE_O, (windowSize.x * .5f) - 45.0f)) {
         gWindowMgr.SetCurWindow(WindowId::CustomSequencedAudio);
     }
-
-    ImGui::PopStyleVar();
-
 
     ImGui::End();
 }
