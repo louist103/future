@@ -1,5 +1,6 @@
 #include "CreateFromDir.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "WindowMgr.h"
 #include "filebox.h"
 #include "zip_archive.h"
@@ -69,7 +70,7 @@ static void AddFilesWorker(CreateFromDirWindow* thisx) {
 
 void CreateFromDirWindow::DrawWindow()
 {
-    ImGui::Begin("Create From Directory", nullptr, ImGuiWindowFlags_NoDecoration);
+    ImGui::Begin("Create From Directory", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove);
     ImGui::SetWindowSize(ImGui::GetMainViewport()->Size);
     ImGui::SetWindowPos(ImGui::GetMainViewport()->Pos);
 
@@ -83,6 +84,8 @@ void CreateFromDirWindow::DrawWindow()
 
     ImGui::SameLine();
     ImGui::TextUnformatted("Create Archive From Directory");
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
+
     ImGui::TextUnformatted("Open a directory and create an archive with the same structure and files");
     
     ImGui::SameLine();

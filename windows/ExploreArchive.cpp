@@ -1,6 +1,7 @@
 #include "ExploreArchive.h"
 #include "filebox.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "WindowMgr.h"
 #include "zip.h"
 #include "stdlib.h"
@@ -8,6 +9,7 @@
 #include "images.h"
 #include "zip_archive.h"
 #include "mpq_archive.h"
+#include "font.h"
 #if defined (_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -31,7 +33,7 @@ ExploreWindow::~ExploreWindow() {
 }
 
 void ExploreWindow::DrawWindow() {
-    ImGui::Begin("Explore Archive", nullptr, ImGuiWindowFlags_NoDecoration);
+    ImGui::Begin("Explore Archive", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove);
     ImGui::SetWindowSize(ImGui::GetMainViewport()->Size);
     ImGui::SetWindowPos(ImGui::GetMainViewport()->Pos);
 
@@ -42,6 +44,8 @@ void ExploreWindow::DrawWindow() {
 
     ImGui::SameLine();
     ImGui::TextUnformatted("Explore Archive");
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
+
     ImGui::InputText("Path", mPathBuff, 0, ImGuiInputTextFlags_::ImGuiInputTextFlags_ReadOnly);
     ImGui::SameLine();
     if (ImGui::Button("Open Archive")) {
@@ -92,6 +96,7 @@ void ExploreWindow::DrawFileList() {
     const ImVec2 childWindowSize = {windowSize.x - cursorPos.x, windowSize.y -cursorPos.y};
     
     ImGui::BeginChild("File List", childWindowSize, 0, 0);
+    ImGui::SetWindowFontScale(0.7f);
     const float windowHeight = ImGui::GetWindowHeight();
     unsigned int i = 0;
     const float textHeight = ImGui::GetTextLineHeight();
@@ -109,29 +114,32 @@ void ExploreWindow::DrawFileList() {
             continue;
         }
 
-        ImGui::Text("%s", s);
         snprintf(btnId, 12, "I%u", i);
-        
-        ImGui::SameLine();
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3.0f, 3.0f));
         ImGui::PushID(btnId);
         
-        if (ImGui::ImageButton(LoadTextureByName("R:\\MagBlack.png", &width, &height), ImVec2(32, 32))) {
+        if (ImGui::Button(ICON_FA_CODE, ImVec2(26, 26))) {
             viewWindow = std::make_unique<FileViewerWindow>(mArchive.get(), s);
         }
         ImGui::PopID();
         ImGui::SameLine();
         btnId[0] = 'E';
         ImGui::PushID(btnId);
-        if (ImGui::ImageButton(LoadTextureByName("R:\\Export.png", &width, &height), ImVec2(32, 32))) {
+        if (ImGui::Button(ICON_FA_DOWNLOAD, ImVec2(26, 26))) {
             char* outPath = nullptr;
             GetSaveFilePath(&outPath);
             SaveFile(outPath, s);
         }
         ImGui::PopID();
+
+        ImGui::SameLine();
+        ImGui::Text("%s", s);
+        ImGui::PopStyleVar(2);
         i++;
     }
     ImGui::EndChild();
-
 }
 
 bool ExploreWindow::OpenArchive() {
@@ -204,9 +212,11 @@ FileViewerWindow::~FileViewerWindow() {
 }
 
 void FileViewerWindow::DrawWindow() {
+    ImGui::PushFont(FontS);
     ImGui::Begin("Memory Editor",&mIsOpen);
     
     ImGui::SetWindowFocus();
     mEditor->DrawContents(mData, mSize);
     ImGui::End();
+    ImGui::PopFont();
 }
