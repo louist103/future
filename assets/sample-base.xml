@@ -1,1 +1,4 @@
-<Sample Version="0" Codec="S16" Medium="Cart" bit26="0" Relocated="0" LoopStart="0" LoopCount="0"/>
+<Sample Version="0" Codec="S16" Medium="Cart" bit26="0">
+<ADPCMLoop Start="0" End="0" Count="0">
+</ADPCMLoop>
+</Sample>

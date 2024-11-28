@@ -157,8 +157,9 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
     // Fill in sample XML
     tinyxml2::XMLPrinter p;
     tinyxml2::XMLElement* root = sampleBaseRoot.RootElement();
+    tinyxml2::XMLElement* loopElement = root->FirstChildElement("ADPCMLoop");
     if (!info->fanfare) {
-        root->SetAttribute("LoopCount", "-1");
+        loopElement->SetAttribute("LoopCount", "-1");
     }
     if (info->loopStart.i != 0) {
         uint64_t loopStartSample;
@@ -173,7 +174,7 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
                 loopStartSample = 0;
             }
         }
-        root->SetAttribute("LoopStart", loopStartSample);
+        loopElement->SetAttribute("LoopStart", loopStartSample);
     }
     if (info->loopEnd.i != 0) {
         uint64_t loopEndSample;
@@ -191,14 +192,15 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
                 loopEndSample = numFrames * numChannels;
             }
         }
-        root->SetAttribute("LoopEnd", loopEndSample);
+        loopElement->SetAttribute("LoopEnd", loopEndSample);
     }
     else {
-        root->SetAttribute("LoopEnd", numFrames * numChannels);
+        loopElement->SetAttribute("LoopEnd", numFrames * numChannels);
     }
+    root->InsertEndChild(loopElement);
     root->SetAttribute("CustomFormat", audioType);
-    root->SetAttribute("SampleSize", numFrames * numChannels * 2);
-    root->SetAttribute("SamplePath", sampleDataPath.get());
+    root->SetAttribute("Size", numFrames * numChannels * 2);
+    root->SetAttribute("Path", sampleDataPath.get());
     size_t samplePathLen = sizeof(sampleXmlBase) + strlen(fileName) + sizeof("_SAMPLE.xml") + 1;
     std::unique_ptr<char[]> sampleXmlPath = std::make_unique<char[]>(samplePathLen);
     snprintf(sampleXmlPath.get(), samplePathLen, "%s%s_SAMPLE.xml", sampleXmlBase, fileName);

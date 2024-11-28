@@ -14,8 +14,7 @@ static const char gFontBaseXml[] =
 <NormalNotesSound/>\
 </Instrument>\
 </Instruments>\
-</SoundFont>\
-";
+</SoundFont>";
 
 static const char gFontBaseMultiXml[] =
 "<SoundFont Version=\"0\" Num=\"0\" Medium=\"Cart\" CachePolicy=\"Either\" Data1=\"511\" Data2=\"3840\" Data3=\"0\">\
@@ -40,16 +39,17 @@ static const char gFontBaseMultiXml[] =
 <NormalNotesSound/>\
 </Instrument>\
 </Instruments>\
-</SoundFont>\
-";
+</SoundFont>";
 
-static const char gSampleBaseXml[] = "<Sample Version=\"0\" Codec=\"S16\" Medium=\"Cart\" bit26=\"0\" Relocated=\"0\" LoopStart=\"0\" LoopCount=\"0\"/>";
+static const char gSampleBaseXml[] = "<Sample Version=\"0\" Codec=\"S16\" Medium=\"Cart\" bit26=\"0\">\
+<ADPCMLoop Start=\"0\" End=\"0\" Count=\"0\">\
+</ADPCMLoop>"\
+"</Sample>";
 
 static const char gSequenceBaseXml[] = "<Sequence Index=\"0\" Medium=\"Cart\" CachePolicy=\"Either\" Size=\"0\" Streamed=\"true\">\
 <FontIndicies>\
 </FontIndicies>\
-</Sequence>\
-";
+</Sequence>";
 
 static constexpr size_t FONT_BASE_XML_SIZE = sizeof(gFontBaseXml);
 static constexpr size_t FONT_BASE_MULTI_XML_SIZE = sizeof(gFontBaseMultiXml);
