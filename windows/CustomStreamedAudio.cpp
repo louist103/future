@@ -159,7 +159,7 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
     tinyxml2::XMLElement* root = sampleBaseRoot.RootElement();
     tinyxml2::XMLElement* loopElement = root->FirstChildElement("ADPCMLoop");
     if (!info->fanfare) {
-        loopElement->SetAttribute("LoopCount", "-1");
+        loopElement->SetAttribute("Count", "-1");
     }
     if (info->loopStart.i != 0) {
         uint64_t loopStartSample;
@@ -174,7 +174,7 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
                 loopStartSample = 0;
             }
         }
-        loopElement->SetAttribute("LoopStart", loopStartSample);
+        loopElement->SetAttribute("Start", loopStartSample);
     }
     if (info->loopEnd.i != 0) {
         uint64_t loopEndSample;
@@ -192,10 +192,10 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
                 loopEndSample = numFrames * numChannels;
             }
         }
-        loopElement->SetAttribute("LoopEnd", loopEndSample);
+        loopElement->SetAttribute("End", loopEndSample);
     }
     else {
-        loopElement->SetAttribute("LoopEnd", numFrames * numChannels);
+        loopElement->SetAttribute("End", numFrames * numChannels);
     }
     root->InsertEndChild(loopElement);
     root->SetAttribute("CustomFormat", audioType);
