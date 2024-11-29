@@ -351,6 +351,42 @@ struct OggFileData {
     size_t pos;
     size_t size;
 };
+typedef enum class OggType {
+    None = -1,
+    Vorbis,
+    Opus,
+} OggType;
+
+static OggType GetOggType(OggFileData* data) {
+    ogg_sync_state oy;
+    ogg_stream_state os;
+    ogg_page og;
+    ogg_packet op;
+    OggType type;
+
+    ogg_sync_init(&oy);
+    char* buffer = ogg_sync_buffer(&oy, 4096);
+    memcpy(buffer, data->data, 4096);
+    ogg_sync_wrote(&oy, 4096);
+
+    ogg_sync_pageout(&oy, &og);
+    ogg_stream_init(&os, ogg_page_serialno(&og));
+    ogg_stream_pagein(&os, &og);
+    ogg_stream_packetout(&os, &op);
+    
+    // Can't use strmp because op.packet isn't a null terminated string.
+    if (memcmp((char*)op.packet, "\x01vorbis", 7) == 0) {
+        type = OggType::Vorbis;
+    } else if (memcmp((char*)op.packet, "OpusHead", 8) == 0) {
+        type = OggType::Opus;
+    } else {
+        type = OggType::None;
+    }
+    ogg_stream_clear(&os);
+    ogg_sync_clear(&oy);
+    return type;
+}
+
 
 static size_t VorbisReadCallback(void* out, size_t size, size_t elems, void* src) {
     OggFileData* data = static_cast<OggFileData*>(src);
@@ -673,6 +709,8 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
             .pos = 0,
             .size = (size_t)fileSize,
         };
+        OggType type = GetOggType(&fileData);
+        if (type == OggType::Vorbis) {
         int ret = ov_open_callbacks(&fileData, &vf, nullptr, 0, cbs);
 
         vorbis_info* vi = ov_info(&vf, -1);
@@ -695,6 +733,7 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
         if (numChannels == 2) {
             SplitOgg(&infos, channels, sampleRate, numFrames, fileSize);
         }
+    }
     }
     else {
         return;
@@ -740,7 +779,7 @@ static void PackFilesMgrWorker(std::vector<char*>* fileQueue, std::unordered_map
         }
     }
 
-    const unsigned int numThreads = std::thread::hardware_concurrency();
+    const unsigned int numThreads = 1;// std::thread::hardware_concurrency();
     auto packFileThreads = std::make_unique<std::thread[]>(numThreads);
     for (unsigned int i = 0; i < numThreads; i++) {
         packFileThreads[i] = std::thread(ProcessAudioFile, fileQueue, fanfareMap, thisx->GetLoopTimeType(), a.get());
@@ -776,7 +815,7 @@ bool CustomStreamedAudioWindow::GetLoopTimeType()
 static bool FillFileCallback(char* path) {
     char* ext = strrchr(path, '.');
     if (ext != nullptr) {
-        if (ext != NULL && (strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, ".flac") == 0) {
+        if (ext != NULL && (strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".opus") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, ".flac") == 0) {
             return true;
         }
     }
