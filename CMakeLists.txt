@@ -101,7 +101,7 @@ elseif ("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "arm64")
 endif()
 
 vcpkg_bootstrap()
-vcpkg_install_packages(zlib bzip2 libzip libogg libvorbis)
+vcpkg_install_packages(zlib bzip2 libzip libogg opus libopusenc libvorbis)
 endif()
 
 
@@ -115,7 +115,9 @@ FetchContent_Declare(
     PATCH_COMMAND ${stormlib_apply_path_if_needed}
 )
 FetchContent_MakeAvailable(StormLib)
-list(APPEND ADDITIONAL_LIB_INCLUDES extern/StormLib/src)
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
+
 include_directories(future, extern/StormLib/src)
 target_link_libraries(future PUBLIC storm)
 
@@ -125,6 +127,7 @@ target_link_libraries(future PRIVATE libzip::zip )
 
 
 file (COPY assets/ DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/assets)
+list(APPEND CMAKE_MODULE_PATH "CMake")
 
 if ((CMAKE_SYSTEM_NAME STREQUAL "Linux") OR (CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
 
@@ -134,28 +137,39 @@ target_link_libraries(future PRIVATE SDL2::SDL2)
 find_package(OpenGL)
 target_link_libraries(future PRIVATE OpenGL::GL)
 
-find_library(OGG_LIB ogg)
-target_link_libraries(future PRIVATE "${OGG_LIB}")
+find_package(Ogg)
+target_link_libraries(Ogg::ogg)
 
-find_library(VORBIS_LIB vorbis)
-target_link_libraries(future PRIVATE "${VORBIS_LIB}")
+find_package(Vorbis REQUIRED)
+target_link_libraries(future PRIVATE Vorbis::vorbis)
+target_link_libraries(future PRIVATE Vorbis::vorbisfile)
+target_link_libraries(future PRIVATE Vorbis::vorbisenc)
 
-find_library(VORBISFILE_LIB vorbisfile)
-target_link_libraries(future PRIVATE "${VORBISFILE_LIB}")
+find_package(Opus)
+target_link_libraries(future PRIVATE ${OPUS_LIBRARY})
 
-find_library(VORBISENC_LIB vorbisenc)
-target_link_libraries(future PRIVATE "${VORBISENC_LIB}")
+find_package(Opusenc)
+target_link_libraries(future PRIVATE ${Opusenc_LIBRARY})
 
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-
-
 find_package(Ogg CONFIG REQUIRED)
 target_link_libraries(future PRIVATE Ogg::ogg)
 
-find_package(Vorbis CONFIG REQUIRED)
+find_package(Opus)
+target_link_libraries(future PRIVATE ${OPUS_LIBRARY})
+
+find_package(Opusenc)
+target_link_libraries(future PRIVATE ${Opusenc_LIBRARY})
+
+find_package(Vorbis REQUIRED)
+target_link_libraries(future PRIVATE Vorbis::vorbis)
 target_link_libraries(future PRIVATE Vorbis::vorbisfile)
+target_link_libraries(future PRIVATE Vorbis::vorbisenc)
+
 
 endif()
+
+target_include_directories(future PRIVATE ${OPUS_INCLUDE_DIR})
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
     set(CPACK_GENERATOR "External")

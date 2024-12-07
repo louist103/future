@@ -29,6 +29,8 @@
 #include <cmath>
 #include <thread>
 #include <filesystem>
+#include <opus/opus.h>
+#include <opus/opusenc.h>
 
 #include "mio.hpp"
 #undef max
@@ -100,6 +102,12 @@ constexpr static std::array<const char*, 4> audioTypeToStr = {
     "ogg",
     "flac",
 };
+// TODO simd
+static void PcmS16ToF(float* dst, int16_t* src, uint64_t numFrames) {
+    for (size_t i = 0; i < numFrames; i++) {
+        dst[i] = src[i] / 32768.0f;
+    }
+}
 
 // Write `data` to either the archive, or if the archive is null, a file on disk
 static void WriteFileData(char* path, void* data, size_t size, Archive* a) {
@@ -388,6 +396,30 @@ static OggType GetOggType(OggFileData* data) {
 }
 
 
+static int OpeWriteCallback(void* vData, const unsigned char* ptr, opus_int32 len) {
+    OggFileData* data = static_cast<OggFileData*>(vData);
+    size_t toRead = len;
+
+    if (toRead > data->size - data->pos) {
+        toRead = data->size - data->pos;
+    }
+
+    memcpy((char*)data->data + data->pos, ptr, toRead);
+    data->pos += toRead;
+    
+    return 0;
+}
+
+static int OpeCloseCallback(void* data) {
+    return 0;
+}
+
+static const OpusEncCallbacks opusCbs = {
+    OpeWriteCallback,
+    OpeCloseCallback,
+};
+
+
 static size_t VorbisReadCallback(void* out, size_t size, size_t elems, void* src) {
     OggFileData* data = static_cast<OggFileData*>(src);
     size_t toRead = size * elems;
@@ -476,7 +508,26 @@ typedef struct ChannelInfo {
     size_t channelSizes[2];
 } ChannelInfo;
 
-static void SplitOgg(ChannelInfo* info, std::unique_ptr<float[]> channels[2], uint64_t sampleRate, uint64_t numFrames, size_t fileSize) {
+static void SplitOggVorbis(ChannelInfo* info, std::unique_ptr<float[]> channels[2], uint64_t* sampleRate, uint64_t numFrames, size_t fileSize) {
+    for (size_t i = 0; i < 2; i++) {
+        OggFileData data;
+        data.data = malloc(fileSize);
+        data.size = fileSize;
+        data.pos = 0;
+        OggOpusComments* comments = ope_comments_create();
+        ope_comments_add(comments, "ENCODER", "future using libopus libopusenc");
+        
+        // TODO, hardcoded to 48KHz even if the original song isn't. Should we resample it to 48k?
+        OggOpusEnc* enc = ope_encoder_create_callbacks(&opusCbs, &data, comments, 48000, 1, 0, nullptr);
+        ope_encoder_write_float(enc, channels[i].get(), numFrames);
+        ope_encoder_drain(enc);
+        ope_encoder_destroy(enc);
+        info->channelData[i] = data.data;
+        info->channelSizes[i] = data.pos;
+    }
+    
+
+    #if 0
     MemoryBuffer outBuffer[2];
     // fileSize will likely always be larger than the original file but it will never need to reallocate the buffer.
     init_memory_buffer(&outBuffer[0], fileSize);
@@ -571,6 +622,7 @@ static void SplitOgg(ChannelInfo* info, std::unique_ptr<float[]> channels[2], ui
     info->channelData[1] = outBuffer[1].data;
     info->channelSizes[0] = outBuffer[0].size;
     info->channelSizes[1] = outBuffer[1].size;
+    #endif
 }
 
 static void WriteWavData(int16_t* l, int16_t* r, ChannelInfo* info, uint64_t numFrames, uint64_t sampleRate) {
@@ -595,7 +647,7 @@ static void WriteWavData(int16_t* l, int16_t* r, ChannelInfo* info, uint64_t num
     drwav_uninit(&outWav);
 }
 
-static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<char*, SeqMetaInfo>* seqMetaMap, bool loopTimeInSamples, Archive* a) {
+static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<char*, SeqMetaInfo>* seqMetaMap, bool loopTimeInSamples, bool transcodeToOpus, Archive* a) {
     while (filesProcessed < fileQueue->size()) {
     char** inputp = &(*fileQueue)[filesProcessed.fetch_add(1, std::memory_order_relaxed)];
     char* input = *inputp;
@@ -649,7 +701,7 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
                 channels[0].get()[pos] = sampleData.get()[i];
                 channels[1].get()[pos] = sampleData.get()[i + 1];
             }
-            SplitOgg(&infos, channels, sampleRate, numFrames, fileSize);
+            SplitOggVorbis(&infos, channels, &sampleRate, numFrames, fileSize);
         }
 
     } else if (WAV_CHECK(dataU8)) {
@@ -665,6 +717,7 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
 
             auto sampleData = std::make_unique<int16_t[]>(numFrames * numChannels);
             drwav_read_pcm_frames_s16(&wav, numFrames, sampleData.get());
+            
             auto sampleDataL = std::make_unique<int16_t[]>(numFrames);
             auto sampleDataR = std::make_unique<int16_t[]>(numFrames);
             size_t pos = 0;
@@ -672,7 +725,17 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
                 sampleDataL.get()[pos] = sampleData.get()[i];
                 sampleDataR.get()[pos] = sampleData.get()[i + 1];
             }
-            WriteWavData(sampleDataL.get(), sampleDataR.get(), &infos, numFrames, sampleRate);
+            if (!transcodeToOpus) {
+                WriteWavData(sampleDataL.get(), sampleDataR.get(), &infos, numFrames, sampleRate);
+            } else {
+                std::unique_ptr<float[]> channelDataF[2];
+                channelDataF[0] = std::make_unique<float[]>(numFrames);
+                channelDataF[1] = std::make_unique<float[]>(numFrames);
+                PcmS16ToF(channelDataF[0].get(), sampleDataL.get(), numFrames);
+                PcmS16ToF(channelDataF[1].get(), sampleDataR.get(), numFrames);
+                SplitOggVorbis(&infos, channelDataF, &sampleRate, numFrames, fileSize);
+                audioType = AudioType::ogg;
+            }
         }
     } else if (FLAC_CHECK(dataU8)) {
         audioType = AudioType::flac;
@@ -691,8 +754,18 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
                 sampleDataL.get()[pos] = sampleData.get()[i];
                 sampleDataR.get()[pos] = sampleData.get()[i + 1];
             }
-            WriteWavData(sampleDataL.get(), sampleDataR.get(), &infos, numFrames, sampleRate);
-            audioType = AudioType::wav;
+            if (!transcodeToOpus) {
+                audioType = AudioType::wav;
+                WriteWavData(sampleDataL.get(), sampleDataR.get(), &infos, numFrames, sampleRate);
+            } else {
+                std::unique_ptr<float[]> channelDataF[2];
+                channelDataF[0] = std::make_unique<float[]>(numFrames);
+                channelDataF[1] = std::make_unique<float[]>(numFrames);
+                PcmS16ToF(channelDataF[0].get(), sampleDataL.get(), numFrames);
+                PcmS16ToF(channelDataF[1].get(), sampleDataR.get(), numFrames);
+                SplitOggVorbis(&infos, channelDataF, &sampleRate, numFrames, fileSize);
+                audioType = AudioType::ogg;
+            }
         }
         drflac_close(flac);
     }
@@ -711,29 +784,29 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
         };
         OggType type = GetOggType(&fileData);
         if (type == OggType::Vorbis) {
-        int ret = ov_open_callbacks(&fileData, &vf, nullptr, 0, cbs);
-
-        vorbis_info* vi = ov_info(&vf, -1);
-
-        numFrames = ov_pcm_total(&vf, -1);
-        sampleRate = vi->rate;
-        numChannels = vi->channels;
-        channels[0] = std::make_unique<float[]>(numFrames);
-        channels[1] = std::make_unique<float[]>(numFrames);
-
-        do {
-            float** pcm;
-            int bitStream;
-            read = ov_read_float(&vf, &pcm, 4096, &bitStream);
-            memcpy(&channels[0].get()[pos], pcm[0], read * sizeof(float));
-            memcpy(&channels[1].get()[pos], pcm[1], read * sizeof(float));
-            pos += read;
-        } while (read > 0);
-
-        if (numChannels == 2) {
-            SplitOgg(&infos, channels, sampleRate, numFrames, fileSize);
+            int ret = ov_open_callbacks(&fileData, &vf, nullptr, 0, cbs);
+    
+            vorbis_info* vi = ov_info(&vf, -1);
+    
+            numFrames = ov_pcm_total(&vf, -1);
+            sampleRate = vi->rate;
+            numChannels = vi->channels;
+            channels[0] = std::make_unique<float[]>(numFrames);
+            channels[1] = std::make_unique<float[]>(numFrames);
+    
+            do {
+                float** pcm;
+                int bitStream;
+                read = ov_read_float(&vf, &pcm, 4096, &bitStream);
+                memcpy(&channels[0].get()[pos], pcm[0], read * sizeof(float));
+                memcpy(&channels[1].get()[pos], pcm[1], read * sizeof(float));
+                pos += read;
+            } while (read > 0);
+    
+            if (numChannels == 2) {
+                SplitOggVorbis(&infos, channels, &sampleRate, numFrames, fileSize);
+            }
         }
-    }
     }
     else {
         return;
@@ -779,10 +852,10 @@ static void PackFilesMgrWorker(std::vector<char*>* fileQueue, std::unordered_map
         }
     }
 
-    const unsigned int numThreads = 1;// std::thread::hardware_concurrency();
+    const unsigned int numThreads = std::thread::hardware_concurrency();
     auto packFileThreads = std::make_unique<std::thread[]>(numThreads);
     for (unsigned int i = 0; i < numThreads; i++) {
-        packFileThreads[i] = std::thread(ProcessAudioFile, fileQueue, fanfareMap, thisx->GetLoopTimeType(), a.get());
+        packFileThreads[i] = std::thread(ProcessAudioFile, fileQueue, fanfareMap, thisx->GetLoopTimeType(), thisx->GetTranscode(), a.get());
     }
 
     for (unsigned int i = 0; i < numThreads; i++) {
@@ -799,17 +872,20 @@ static std::array<const char*, 2> sToggleLabels = {
     "Create Archive",
 };
 
-int CustomStreamedAudioWindow::GetRadioState() {
+int CustomStreamedAudioWindow::GetRadioState() const {
     return mRadioState;
 }
 
-char* CustomStreamedAudioWindow::GetSavePath() {
+char* CustomStreamedAudioWindow::GetSavePath() const {
     return mSavePath;
 }
 
-bool CustomStreamedAudioWindow::GetLoopTimeType()
-{
+bool CustomStreamedAudioWindow::GetLoopTimeType() const {
     return mLoopIsISamples;
+}
+
+bool CustomStreamedAudioWindow::GetTranscode() const {
+    return mTranscodeToOpus;
 }
 
 static bool FillFileCallback(char* path) {
@@ -867,6 +943,10 @@ void CustomStreamedAudioWindow::DrawWindow() {
     ImGui::RadioButton("OTR", &mRadioState, 1);
     ImGui::SameLine();
     ImGui::RadioButton("O2R", &mRadioState, 2);
+
+    ImGui::SameLine();
+    ImGui::Checkbox("Transcode to opus", &mTranscodeToOpus);
+    ImGui::SetItemTooltip("Transcode uncompressed files to the opus codec.\nRecommended because of its speed and space savings.");
 
     if (ImGui::Button("Set Save Path")) {
         GetSaveFilePath(&mSavePath);

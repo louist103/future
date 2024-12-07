@@ -21,9 +21,10 @@ public:
     CustomStreamedAudioWindow();
     ~CustomStreamedAudioWindow();
     void DrawWindow();
-    int GetRadioState();
-    char* GetSavePath();
-    bool GetLoopTimeType();
+    int GetRadioState() const;
+    char* GetSavePath() const;
+    bool GetLoopTimeType() const;
+    bool GetTranscode() const;
 private:
     void DrawPendingFilesList();
     void ClearPathBuff();
@@ -40,6 +41,7 @@ private:
     bool mThreadIsDone = false;
     bool mPackAsArchive = true;
     bool mLoopIsISamples = false;
+    bool mTranscodeToOpus = true;
 };
 
 #endif

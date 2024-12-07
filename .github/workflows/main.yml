@@ -15,7 +15,16 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y libsdl2-dev libzip-dev libogg-dev libvorbis-dev libtinyxml2-dev zipcmp zipmerge ziptool
+        sudo apt install -y libsdl2-dev libzip-dev libogg-dev libvorbis-dev libopus-dev libopusfile-dev libopusenc-dev opus-tools libtinyxml2-dev zipcmp zipmerge ziptool
+    - name: Build libopusenc
+      run: |
+        git clone https://gitlab.xiph.org/xiph/libopusenc.git
+        cd libopusenc
+        ./autogen.sh
+        ./configure
+        make -j 10
+        sudo make install
+        sudo ldconfig    
     - name: Build
       run: |
         cmake -S. -Bbuild-rel -DCMAKE_BUILD_TYPE:STRING=Release
@@ -38,7 +47,16 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y libsdl2-dev libzip-dev libogg-dev libvorbis-dev libtinyxml2-dev zipcmp zipmerge ziptool
+        sudo apt install -y libsdl2-dev libzip-dev libogg-dev libvorbis-dev libopus-dev libopusfile-dev opus-tools libtinyxml2-dev zipcmp zipmerge ziptool
+    - name: Build libopusenc
+      run: |
+        git clone https://gitlab.xiph.org/xiph/libopusenc.git
+        cd libopusenc
+        ./autogen.sh
+        ./configure
+        make -j 10
+        sudo make install
+        sudo ldconfig   
     - name: Build
       run: |
         cmake -S. -Bbuild-rel -DCMAKE_BUILD_TYPE:STRING=Release
