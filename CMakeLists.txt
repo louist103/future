@@ -147,16 +147,19 @@ target_link_libraries(future PRIVATE Vorbis::vorbisenc)
 
 find_package(Opus)
 target_link_libraries(future PRIVATE ${OPUS_LIBRARY})
+target_include_directories(future PRIVATE ${OPUS_INCLUDE_DIR})
+
 
 find_package(Opusenc)
 target_link_libraries(future PRIVATE ${Opusenc_LIBRARY})
+
 
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 find_package(Ogg CONFIG REQUIRED)
 target_link_libraries(future PRIVATE Ogg::ogg)
 
-find_package(Opus)
-target_link_libraries(future PRIVATE ${OPUS_LIBRARY})
+find_package(Opus CONFIG REQUIRED)
+target_link_libraries(future PRIVATE Opus::opus)
 
 find_package(Opusenc)
 target_link_libraries(future PRIVATE ${Opusenc_LIBRARY})
@@ -169,7 +172,6 @@ target_link_libraries(future PRIVATE Vorbis::vorbisenc)
 
 endif()
 
-target_include_directories(future PRIVATE ${OPUS_INCLUDE_DIR})
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
     set(CPACK_GENERATOR "External")
