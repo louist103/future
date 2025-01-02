@@ -18,7 +18,7 @@ typedef struct SeqMetaInfo {
 
 class CustomStreamedAudioWindow : public WindowBase {
 public:
-    CustomStreamedAudioWindow();
+    CustomStreamedAudioWindow() = default;
     ~CustomStreamedAudioWindow();
     void DrawWindow();
     int GetRadioState() const;

@@ -35,10 +35,6 @@
 #include "mio.hpp"
 #undef max
 
-CustomStreamedAudioWindow::CustomStreamedAudioWindow() {
-
-}
-
 // Not part of the class because it needs to be accessed from a thread.
 static void ClearFileQueue(std::vector<char*>* fileQueue) {
     for (auto f : *fileQueue) {
@@ -103,9 +99,9 @@ constexpr static std::array<const char*, 4> audioTypeToStr = {
     "flac",
 };
 // TODO simd
-static void PcmS16ToF(float* dst, int16_t* src, uint64_t numFrames) {
+static void PcmS16ToF(float* dst, const int16_t* src, const uint64_t numFrames) {
     for (size_t i = 0; i < numFrames; i++) {
-        dst[i] = src[i] / 32768.0f;
+        dst[i] = static_cast<float>(src[i]) / 32768.0f;
     }
 }
 
@@ -150,14 +146,14 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
     tinyxml2::XMLDocument sampleBaseRoot;
     tinyxml2::XMLError e = sampleBaseRoot.LoadFile("assets/sample-base.xml");
     if (e != 0) {
-        printf("Failed to open sample-base.xml. Falling back to the embeded version...\n");
+        printf("Failed to open sample-base.xml. Falling back to the embedded version...\n");
         e = sampleBaseRoot.Parse(gSampleBaseXml, SAMPLE_BASE_XML_SIZE);
         if (e != 0) {
-            printf("Failed to parse embeded XML. Exiting...\n");
+            printf("Failed to parse embedded XML. Exiting...\n");
             exit(1);
         }
     }
-    
+
     size_t sampleDataSize = sizeof(sampleDataBase) + strlen(fileName) + 1;
     auto sampleDataPath = std::make_unique<char[]>(sampleDataSize);
     snprintf(sampleDataPath.get(), sampleDataSize, "%s%s", sampleDataBase, fileName);
@@ -223,10 +219,10 @@ static void CreateSequenceXml(char* fileName, char* fontPath, unsigned int lengt
     tinyxml2::XMLDocument seqBaseRoot;
     tinyxml2::XMLError e = seqBaseRoot.LoadFile("assets/seq-base.xml");
     if (e != 0) {
-        printf("Failed to open seq-base.xml. Falling back to the embeded version...\n");
+        printf("Failed to open seq-base.xml. Falling back to the embedded version...\n");
         e = seqBaseRoot.Parse(gSequenceBaseXml, SEQ_BASE_XML_SIZE);
         if (e != 0) {
-            printf("Failed to parse embeded XML. Exiting...\n");
+            printf("Failed to parse embedded XML. Exiting...\n");
             exit(1);
         }
     }
@@ -268,10 +264,10 @@ static std::unique_ptr<char[]> CreateFontXml(char* fileName, uint64_t sampleRate
     tinyxml2::XMLDocument fontBaseRoot;
     tinyxml2::XMLError e = fontBaseRoot.LoadFile("assets/font-base.xml");
     if (e != 0) {
-        printf("Failed to open font-base.xml. Falling back to the embeded version...\n");
+        printf("Failed to open font-base.xml. Falling back to the embedded version...\n");
         e = fontBaseRoot.Parse(gFontBaseXml, FONT_BASE_XML_SIZE);
         if (e != 0) {
-            printf("Failed to parse embeded XML. Exiting...\n");
+            printf("Failed to parse embedded XML. Exiting...\n");
             exit(1);
         }
     }
@@ -306,10 +302,10 @@ static std::unique_ptr<char[]> CreateFontMultiXml(std::unique_ptr<char[]> fileNa
     tinyxml2::XMLDocument fontBaseRoot;
     tinyxml2::XMLError e = fontBaseRoot.LoadFile("assets/font-base-multi.xml");
     if (e != 0) {
-        printf("Failed to open font-base-multi.xml. Falling back to the embeded version...\n");
+        printf("Failed to open font-base-multi.xml. Falling back to the embedded version...\n");
         e = fontBaseRoot.Parse(gFontBaseMultiXml, FONT_BASE_MULTI_XML_SIZE);
         if (e != 0) {
-            printf("Failed to parse embeded XML. Exiting...\n");
+            printf("Failed to parse embedded XML. Exiting...\n");
             exit(1);
         }
     }
@@ -382,7 +378,7 @@ static OggType GetOggType(OggFileData* data) {
     ogg_stream_pagein(&os, &og);
     ogg_stream_packetout(&os, &op);
     
-    // Can't use strmp because op.packet isn't a null terminated string.
+    // Can't use strcmp because op.packet isn't a null terminated string.
     if (memcmp((char*)op.packet, "\x01vorbis", 7) == 0) {
         type = OggType::Vorbis;
     } else if (memcmp((char*)op.packet, "OpusHead", 8) == 0) {
@@ -467,7 +463,7 @@ static long VorbisTellCallback(void* src) {
     return data->pos;
 }
 
-static const ov_callbacks cbs = {
+static constexpr ov_callbacks cbs = {
     VorbisReadCallback,
     VorbisSeekCallback,
     VorbisCloseCallback,
@@ -477,7 +473,7 @@ static const ov_callbacks cbs = {
 // We don't want this to show less files than exist in the folder to pack when the operation is finished.
 // `atomic` variables will ensure there isn't any inconsistency due to multi-threading.
 static std::atomic<unsigned int> filesProcessed = 0;
-
+#if 0
 typedef struct {
     unsigned char* data;
     size_t size;
@@ -502,7 +498,7 @@ void write_to_buffer(MemoryBuffer* buffer, unsigned char* data, size_t data_size
     memcpy(buffer->data + buffer->size, data, data_size);
     buffer->size += data_size;
 }
-
+#endif
 typedef struct ChannelInfo {
     void* channelData[2];
     size_t channelSizes[2];
@@ -625,9 +621,110 @@ static void SplitOggVorbis(ChannelInfo* info, std::unique_ptr<float[]> channels[
     #endif
 }
 
+static void DecodeOpusFile(uint64_t* numChannels, uint64_t* sampleRate, uint64_t* numSamples, OggFileData* fileData, std::unique_ptr<float[]> channels[2]) {
+    ogg_sync_state oy;
+    ogg_stream_state os;
+    ogg_page og;
+    ogg_packet op;
+
+    ogg_sync_init(&oy);
+    // Read the first page
+    char* buffer = ogg_sync_buffer(&oy, 4096);
+    VorbisReadCallback(buffer, 4096, 1, fileData);
+    // It would be best to use the number of bytes read from the callback but if it's too small the file is
+    // probably invalid anyway
+    ogg_sync_wrote(&oy, 4096); // Tell the libogg data was put into its buffer for processing
+    ogg_sync_pageout(&oy, &og);
+    ogg_stream_init(&os, ogg_page_serialno(&og));
+    ogg_stream_pagein(&os, &og);
+    ogg_stream_packetout(&os, &op);
+    *sampleRate = reinterpret_cast<uint32_t*>(op.packet)[3];
+    *numChannels = op.packet[9];
+    // We don't care about the second header and its data
+    int curHdr = 0;
+    // Consume the next header
+    while (curHdr < 1) {
+        while (curHdr < 1) {
+            int result = ogg_sync_pageout(&oy, &og);
+            if (result == 0)
+                break; // Need more data
+            if (result == 1) {
+                ogg_stream_pagein(&os, &og);
+                while (curHdr < 1) {
+                    result = ogg_stream_packetout(&os, &op);
+                    if (result == 0) // Again, needs more data. Get more from pageout, pagein
+                        break;
+                    if (result < 0) {
+                        // This is bad. Handle it at some point...
+                    }
+                    curHdr++;
+                }
+            }
+        }
+        /* no harm in not checking before adding more */
+        buffer = ogg_sync_buffer(&oy, 4096);
+        VorbisReadCallback(buffer, 4096, 1, fileData);
+        ogg_sync_wrote(&oy, 4096);
+    }
+    OpusDecoder* dec = opus_decoder_create(48000, 2, nullptr);
+    int eos = 0;
+    int read = 0;
+    std::vector<float> samples;
+    size_t pos = 0;
+    while (!eos) {
+        while (!eos) {
+            int res = ogg_sync_pageout(&oy, &og);
+            if (res == 0) // Need more data
+                break;
+            if (res < 0) {
+                // This is bad...
+            }
+            ogg_stream_pagein(&os, &og);
+            while (true) {
+                res = ogg_stream_packetout(&os, &op);
+                if (res == 0)
+                    break;
+                if (res < 0) {
+                    // You should know by now this is bad...
+                }
+                float pcm[960 * 6 * 2]; // Largest possible size
+                // Decode opus encoded samples
+                const int frameSize = opus_decode_float(dec, op.packet, op.bytes, pcm, 960 * 6, 0);
+                // There isn't a good way to know how long an opus file is, so we need to keep filling a buffer
+                // like this.
+                samples.resize(samples.size() + frameSize * 2);
+                memcpy(samples.data() + pos, pcm, frameSize * sizeof(float) * 2);
+                pos += frameSize * 2;
+            }
+            eos = ogg_page_eos(&og);
+        }
+        if (!eos) {
+            buffer = ogg_sync_buffer(&oy, 4096);
+            // Needs to read 4096 elements due to how the return works.
+            read = VorbisReadCallback(buffer, 1, 4096, fileData);
+            ogg_sync_wrote(&oy, read);
+            if (read == 0) {
+                eos = 1;
+            }
+        }
+    }
+    channels[0] = std::make_unique<float[]>(pos * sizeof(float));
+    channels[1] = std::make_unique<float[]>(pos * sizeof(float));
+    *numSamples = pos;
+    pos = 0;
+    for (size_t i = 0; i < *numSamples - 1; i += 2, pos++) {
+        channels[0].get()[pos] = samples[i];
+        channels[1].get()[pos] = samples[i + 1];
+    }
+    *numSamples /= 2;
+    opus_decoder_destroy(dec);
+
+    ogg_stream_clear(&os);
+    ogg_sync_clear(&oy);
+}
+
 static void WriteWavData(int16_t* l, int16_t* r, ChannelInfo* info, uint64_t numFrames, uint64_t sampleRate) {
     drwav outWav;
-    size_t outDataSize = 0;
 
     const drwav_data_format format = {
         .container = drwav_container_riff,
@@ -670,7 +767,7 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
     uint64_t numChannels;
     uint64_t sampleRate;
     int audioType;
-    // Only used for multi-channel files
+    // Only used for multichannel files
     ChannelInfo infos{};
 
 
@@ -770,9 +867,6 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
         drflac_close(flac);
     }
     else if (OGG_CHECK(dataU8)) {
-        char dataBuff[4096];
-        long read = 0;
-        size_t pos = 0;
         std::unique_ptr<float[]> channels[2];
 
         audioType = AudioType::ogg;
@@ -782,30 +876,45 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
             .pos = 0,
             .size = (size_t)fileSize,
         };
-        OggType type = GetOggType(&fileData);
-        if (type == OggType::Vorbis) {
-            int ret = ov_open_callbacks(&fileData, &vf, nullptr, 0, cbs);
-    
-            vorbis_info* vi = ov_info(&vf, -1);
-    
-            numFrames = ov_pcm_total(&vf, -1);
-            sampleRate = vi->rate;
-            numChannels = vi->channels;
-            channels[0] = std::make_unique<float[]>(numFrames);
-            channels[1] = std::make_unique<float[]>(numFrames);
-    
-            do {
-                float** pcm;
-                int bitStream;
-                read = ov_read_float(&vf, &pcm, 4096, &bitStream);
-                memcpy(&channels[0].get()[pos], pcm[0], read * sizeof(float));
-                memcpy(&channels[1].get()[pos], pcm[1], read * sizeof(float));
-                pos += read;
-            } while (read > 0);
-    
-            if (numChannels == 2) {
-                SplitOggVorbis(&infos, channels, &sampleRate, numFrames, fileSize);
+        switch (GetOggType(&fileData)) {
+            case OggType::Vorbis: {
+                long read = 0;
+                size_t pos = 0;
+                if (const int ret = ov_open_callbacks(&fileData, &vf, nullptr, 0, cbs); ret < 0) {
+                    printf("Vorbisfile failed %d\n", ret);
+                    return;
+                }
+                vorbis_info* vi = ov_info(&vf, -1);
+
+                numFrames = ov_pcm_total(&vf, -1);
+                sampleRate = vi->rate;
+                numChannels = vi->channels;
+                channels[0] = std::make_unique<float[]>(numFrames);
+                channels[1] = std::make_unique<float[]>(numFrames);
+
+                do {
+                    float** pcm;
+                    int bitStream;
+                    read = ov_read_float(&vf, &pcm, 4096, &bitStream);
+                    memcpy(&channels[0].get()[pos], pcm[0], read * sizeof(float));
+                    memcpy(&channels[1].get()[pos], pcm[1], read * sizeof(float));
+                    pos += read;
+                } while (read > 0);
+
+                if (numChannels == 2) {
+                    SplitOggVorbis(&infos, channels, &sampleRate, numFrames, fileSize);
+                }
+                break;
             }
+            case OggType::Opus: {
+                DecodeOpusFile(&numChannels, &sampleRate, &numFrames, &fileData, channels);
+                SplitOggVorbis(&infos, channels, &sampleRate, numFrames, fileSize);
+                break;
+            }
+            default:
+                printf("OGG file not Vorbis or OPUS\n");
+                return;;
+
         }
     }
     else {
@@ -831,7 +940,7 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
     float lengthF = (float)numFrames / (float)sampleRate;
     lengthF = ceilf(lengthF);
     unsigned int length = static_cast<unsigned int>(lengthF);
-    CreateSequenceXml(fileName, fontXmlPath.get(), length, (*seqMetaMap).at(fileName).fanfare, numChannels == 2, a);
+    CreateSequenceXml(fileName, fontXmlPath.get(), length, seqMetaMap->at(fileName).fanfare, numChannels == 2, a);
     // Since the function that allocates the paths allocates them 2 byte aligned, we can use the lowest bit as a signal that this file has been processed.
     uintptr_t inputU = reinterpret_cast<uintptr_t>(*inputp);
     inputU |= 1;
@@ -867,10 +976,12 @@ static void PackFilesMgrWorker(std::vector<char*>* fileQueue, std::unordered_map
     *threadDone = true;
 }
 
+#if 0
 static std::array<const char*, 2> sToggleLabels = {
     "Create Folder",
     "Create Archive",
 };
+#endif
 
 int CustomStreamedAudioWindow::GetRadioState() const {
     return mRadioState;
@@ -891,7 +1002,7 @@ bool CustomStreamedAudioWindow::GetTranscode() const {
 static bool FillFileCallback(char* path) {
     char* ext = strrchr(path, '.');
     if (ext != nullptr) {
-        if (ext != NULL && (strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".opus") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, ".flac") == 0) {
+        if ((strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".opus") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, ".flac") == 0) {
             return true;
         }
     }
@@ -983,8 +1094,8 @@ void CustomStreamedAudioWindow::DrawWindow() {
 
 void CustomStreamedAudioWindow::FillFanfareMap() {
     mSeqMetaMap.clear();
-    for (size_t i = 0; i < mFileQueue.size(); i++) {
-        char* fileName = strrchr(mFileQueue[i], PATH_SEPARATOR);
+    for (const auto f : mFileQueue) {
+        char* fileName = strrchr(f, PATH_SEPARATOR);
         fileName++;
         mSeqMetaMap[fileName].fanfare = false;
         mSeqMetaMap[fileName].loopStart.i = 0;
@@ -1011,9 +1122,6 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
         return;
     }
 
-    const ImVec2 cursorPos = ImGui::GetCursorPos();
-    const ImVec2 windowSize = ImGui::GetWindowSize();
-    const ImVec2 childWindowSize = { windowSize.x - cursorPos.x, windowSize.y - cursorPos.y };
     const ImVec2 fiveCharsWidth = ImGui::CalcTextSize("00000000");
     const ImVec2 labelWidth = ImGui::CalcTextSize(loopToggleLabels[0]);
     ImGui::TextUnformatted("Files to Pack:");
