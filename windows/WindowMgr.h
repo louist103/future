@@ -13,6 +13,7 @@ enum class WindowId {
     CustomAudio,
     CustomStreamedAudio,
     CustomSequencedAudio,
+    CustomSoundFont,
     FromDir,
     Max,
 };

@@ -20,7 +20,7 @@ class CustomStreamedAudioWindow : public WindowBase {
 public:
     CustomStreamedAudioWindow() = default;
     ~CustomStreamedAudioWindow();
-    void DrawWindow();
+    void DrawWindow() override;
     int GetRadioState() const;
     char* GetSavePath() const;
     bool GetLoopTimeType() const;

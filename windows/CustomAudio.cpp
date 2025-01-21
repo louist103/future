@@ -30,7 +30,7 @@ void CustomAudioWindow::DrawWindow() {
 
     const ImVec2 windowSize = ImGui::GetWindowSize();
 
-    if (BigIconButton("Streamed", ICON_FA_FILE_AUDIO_O, (windowSize.x * .5f) - 45.0f)) {
+    if (BigIconButton("Streamed", ICON_FA_FILE_AUDIO_O, (windowSize.x * .3f) - 45.0f)) {
         gWindowMgr.SetCurWindow(WindowId::CustomStreamedAudio);
     }
 
@@ -38,8 +38,16 @@ void CustomAudioWindow::DrawWindow() {
     ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical, 3.0f);
     ImGui::SameLine();
 
-    if (BigIconButton("Sequenced", ICON_FA_FILE_CODE_O, (windowSize.x * .5f) - 45.0f)) {
+    if (BigIconButton("Sequenced", ICON_FA_FILE_CODE_O, (windowSize.x * .3f) - 45.0f)) {
         gWindowMgr.SetCurWindow(WindowId::CustomSequencedAudio);
+    }
+
+    ImGui::SameLine();
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical, 3.0f);
+    ImGui::SameLine();
+
+    if (BigIconButton("Soundfont Editor", ICON_FA_DATABASE, (windowSize.x * .3f) - 45.0f)) {
+        gWindowMgr.SetCurWindow(WindowId::CustomSoundFont);
     }
 
     ImGui::End();

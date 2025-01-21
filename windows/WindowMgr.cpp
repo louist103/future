@@ -6,6 +6,7 @@
 #include "CustomAudio.h"
 #include "CustomStreamedAudio.h"
 #include "CustomSequencedAudio.h"
+#include"CustomSoundFontWindow.h"
 
 WindowId WindowMgr::GetCurWindow(){
     return mCurWindowId;
@@ -45,6 +46,9 @@ void WindowMgr::ProcessWindowChange()
             case WindowId::CustomSequencedAudio:
                 mCurWindow = std::make_unique<CustomSequencedAudioWindow>();
                 break;
+            case WindowId::CustomSoundFont:
+                mCurWindow = std::make_unique<CustomSoundFontWindow>();
+            break;
         }
     }
     windowShouldChange = false;
