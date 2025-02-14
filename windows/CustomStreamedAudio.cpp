@@ -889,19 +889,18 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
                 numFrames = ov_pcm_total(&vf, -1);
                 sampleRate = vi->rate;
                 numChannels = vi->channels;
-                channels[0] = std::make_unique<float[]>(numFrames);
-                channels[1] = std::make_unique<float[]>(numFrames);
-
-                do {
-                    float** pcm;
-                    int bitStream;
-                    read = ov_read_float(&vf, &pcm, 4096, &bitStream);
-                    memcpy(&channels[0].get()[pos], pcm[0], read * sizeof(float));
-                    memcpy(&channels[1].get()[pos], pcm[1], read * sizeof(float));
-                    pos += read;
-                } while (read > 0);
-
                 if (numChannels == 2) {
+                    channels[0] = std::make_unique<float[]>(numFrames);
+                    channels[1] = std::make_unique<float[]>(numFrames);
+
+                    do {
+                        float** pcm;
+                        int bitStream;
+                        read = ov_read_float(&vf, &pcm, 4096, &bitStream);
+                        memcpy(&channels[0].get()[pos], pcm[0], read * sizeof(float));
+                        memcpy(&channels[1].get()[pos], pcm[1], read * sizeof(float));
+                        pos += read;
+                    } while (read > 0);
                     SplitOggVorbis(&infos, channels, &sampleRate, numFrames, fileSize);
                 }
                 break;
