@@ -504,8 +504,8 @@ typedef struct ChannelInfo {
     size_t channelSizes[2];
 } ChannelInfo;
 
-static void SplitOggVorbis(ChannelInfo* info, std::unique_ptr<float[]> channels[2], uint64_t* sampleRate, uint64_t numFrames, size_t fileSize) {
-    for (size_t i = 0; i < 2; i++) {
+static void SplitOggVorbis(ChannelInfo* info, std::unique_ptr<float[]> channels[2], uint64_t* sampleRate, uint64_t numFrames, size_t fileSize, uint32_t numChannels) {
+    for (size_t i = 0; i < numChannels; i++) {
         OggFileData data;
         data.data = malloc(fileSize);
         data.size = fileSize;
@@ -621,7 +621,7 @@ static void SplitOggVorbis(ChannelInfo* info, std::unique_ptr<float[]> channels[
     #endif
 }
 
-static void DecodeOpusFile(uint64_t* numChannels, uint64_t* sampleRate, uint64_t* numSamples, OggFileData* fileData, std::unique_ptr<float[]> channels[2]) {
+static void DecodeOpusFile(uint32_t* numChannels, uint64_t* sampleRate, uint64_t* numSamples, OggFileData* fileData, std::unique_ptr<float[]> channels[2]) {
     ogg_sync_state oy;
     ogg_stream_state os;
     ogg_page og;
@@ -764,7 +764,7 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
     
     uint8_t* dataU8;
     uint64_t numFrames;
-    uint64_t numChannels;
+    uint32_t numChannels;
     uint64_t sampleRate;
     int audioType;
     // Only used for multichannel files
@@ -798,7 +798,17 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
                 channels[0].get()[pos] = sampleData.get()[i];
                 channels[1].get()[pos] = sampleData.get()[i + 1];
             }
-            SplitOggVorbis(&infos, channels, &sampleRate, numFrames, fileSize);
+            SplitOggVorbis(&infos, channels, &sampleRate, numFrames, fileSize, 2);
+        }
+        else if (numChannels == 1) {
+            if (transcodeToOpus) {
+                audioType = AudioType::ogg;
+                std::unique_ptr<float[]> channelDataF[2]; // `SplitOggVorbis` wants an array so we will give it one but with one element initialized.
+                channelDataF[0] = std::make_unique<float[]>(numFrames);
+                drmp3_read_pcm_frames_f32(&mp3, numFrames, channelDataF[0].get());
+                SplitOggVorbis(&infos, channelDataF, &sampleRate, numFrames, fileSize, 1);
+
+            }
         }
 
     } else if (WAV_CHECK(dataU8)) {
@@ -813,14 +823,25 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
             // Split the two channels
 
             auto sampleData = std::make_unique<int16_t[]>(numFrames * numChannels);
-            drwav_read_pcm_frames_s16(&wav, numFrames, sampleData.get());
+            int16_t* usedSampleData;
+            if (wav.translatedFormatTag == DR_WAVE_FORMAT_PCM && wav.bitsPerSample == 16) {
+                // If the data is known to be s16 we can just read the raw data directly from the file instead of copying it into our own buffers as long as we don't write to it.
+                // This data will be copied else where at some point before freeing the file
+                usedSampleData = (int16_t*)(wav.memoryStream.data + wav.memoryStream.currentReadPos);
+            }
+            else {
+                // Otherwise let drwav convert it to s16
+                drwav_read_pcm_frames_s16(&wav, numFrames, sampleData.get());
+                usedSampleData = sampleData.get();
+            }
+
             
             auto sampleDataL = std::make_unique<int16_t[]>(numFrames);
             auto sampleDataR = std::make_unique<int16_t[]>(numFrames);
             size_t pos = 0;
             for (size_t i = 0; i < numFrames * numChannels - 1; i += 2, pos++) {
-                sampleDataL.get()[pos] = sampleData.get()[i];
-                sampleDataR.get()[pos] = sampleData.get()[i + 1];
+                sampleDataL.get()[pos] = usedSampleData[i];
+                sampleDataR.get()[pos] = usedSampleData[i + 1];
             }
             if (!transcodeToOpus) {
                 WriteWavData(sampleDataL.get(), sampleDataR.get(), &infos, numFrames, sampleRate);
@@ -830,8 +851,24 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
                 channelDataF[1] = std::make_unique<float[]>(numFrames);
                 PcmS16ToF(channelDataF[0].get(), sampleDataL.get(), numFrames);
                 PcmS16ToF(channelDataF[1].get(), sampleDataR.get(), numFrames);
-                SplitOggVorbis(&infos, channelDataF, &sampleRate, numFrames, fileSize);
+                SplitOggVorbis(&infos, channelDataF, &sampleRate, numFrames, fileSize, numChannels);
                 audioType = AudioType::ogg;
+            }
+        }
+        else if (numChannels == 1) {
+            if (transcodeToOpus) {
+                audioType = AudioType::ogg;
+                std::unique_ptr<float[]> channelDataF[2]; // `SplitOggVorbis` wants an array so we will give it one but with one element initialized.
+                channelDataF[0] = std::make_unique<float[]>(numFrames);
+                if (wav.translatedFormatTag == DR_WAVE_FORMAT_PCM && wav.bitsPerSample == 16) {
+                    // Small optimization to avoid multiple copies
+                    PcmS16ToF(channelDataF[0].get(), (const int16_t*)(wav.memoryStream.data + wav.memoryStream.currentReadPos), numFrames);
+                }
+                else {
+                    drwav_read_pcm_frames_f32(&wav, numFrames, channelDataF[0].get());
+                }
+                SplitOggVorbis(&infos, channelDataF, &sampleRate, numFrames, fileSize, 1);
+
             }
         }
     } else if (FLAC_CHECK(dataU8)) {
@@ -860,8 +897,20 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
                 channelDataF[1] = std::make_unique<float[]>(numFrames);
                 PcmS16ToF(channelDataF[0].get(), sampleDataL.get(), numFrames);
                 PcmS16ToF(channelDataF[1].get(), sampleDataR.get(), numFrames);
-                SplitOggVorbis(&infos, channelDataF, &sampleRate, numFrames, fileSize);
+                SplitOggVorbis(&infos, channelDataF, &sampleRate, numFrames, fileSize, 2);
                 audioType = AudioType::ogg;
+            }
+        }
+        else if (numChannels == 1) {
+            if (transcodeToOpus) {
+                audioType = AudioType::ogg;
+                std::unique_ptr<float[]> channelDataF[2]; // `SplitOggVorbis` wants an array so we will give it one but with one element initialized.
+                auto sampleData = std::make_unique<int16_t[]>(numFrames);
+                channelDataF[0] = std::make_unique<float[]>(numFrames);
+                drflac_read_pcm_frames_s16(flac, numFrames, sampleData.get());
+                PcmS16ToF(channelDataF[0].get(), sampleData.get(), numFrames);
+                SplitOggVorbis(&infos, channelDataF, &sampleRate, numFrames, fileSize, 1);
+                
             }
         }
         drflac_close(flac);
@@ -901,13 +950,13 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
                         memcpy(&channels[1].get()[pos], pcm[1], read * sizeof(float));
                         pos += read;
                     } while (read > 0);
-                    SplitOggVorbis(&infos, channels, &sampleRate, numFrames, fileSize);
+                    SplitOggVorbis(&infos, channels, &sampleRate, numFrames, fileSize, numChannels);
                 }
                 break;
             }
             case OggType::Opus: {
                 DecodeOpusFile(&numChannels, &sampleRate, &numFrames, &fileData, channels);
-                SplitOggVorbis(&infos, channels, &sampleRate, numFrames, fileSize);
+                SplitOggVorbis(&infos, channels, &sampleRate, numFrames, fileSize, numChannels);
                 break;
             }
             default:
