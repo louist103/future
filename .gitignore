@@ -1,7 +1,7 @@
-build/
+build*/
 cmake-build-*/
 .idea
 .vs
 .vscode
 *.ini
-/buildmm
+
