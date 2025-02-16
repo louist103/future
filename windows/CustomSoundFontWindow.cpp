@@ -316,10 +316,11 @@ void CustomSoundFontWindow::DrawDrums(bool locked) const {
         auto tuningTag = std::make_unique<char[]>(TAG_SIZE("##"));
         auto envTag = std::make_unique<char[]>(TAG_SIZE("##"));
         for (unsigned int i = 0; i < mSoundFont.numDrums; i++) {
+
             bool modified = false;
             DrawSample("Drum", &mSoundFont.drums[i].sample, &modified);
             sprintf(envTreeTag.get(), "Envelopes(%u)", mSoundFont.drums[i].numEnvelopes);
-            if (ImGui::TreeNodeEx(mSoundFont.drums[i].envs, ImGuiTreeNodeFlags_None, envTreeTag.get())) {
+            if (ImGui::TreeNodeEx(mSoundFont.drums[i].envs, ImGuiTreeNodeFlags_None, "%s", envTreeTag.get())) {
                 for (unsigned int j = 0; j < mSoundFont.drums[i].numEnvelopes; j++) {
                     sprintf(envTag.get(), "Delay##%p", (&mSoundFont.drums[i].envs[j]));
                     if (ImGui::InputScalarN(envTag.get(), ImGuiDataType_S16, &mSoundFont.drums[i].envs[j].delay, 1)) {
@@ -336,6 +337,7 @@ void CustomSoundFontWindow::DrawDrums(bool locked) const {
             if (modified) {
                 mSoundFont.drums[i].modified = true;
             }
+
         }
         ImGui::TreePop();
     }
@@ -410,6 +412,7 @@ void CustomSoundFontWindow::DrawSfxTbl(bool locked) const {
 static void DrawSample(const char* type, ZSample* sample, bool* modified) {
     auto sampleButtonTag = std::make_unique<char[]>(TAG_SIZE(ICON_FA_PENCIL"##"));
     sprintf(sampleButtonTag.get(), "%s##%p", ICON_FA_PENCIL, &sample->path);
+    ImGui::Indent();
     if (sample->path != nullptr) {
         auto tuningTag = std::make_unique<char[]>(TAG_SIZE("##"));
 
@@ -442,6 +445,7 @@ static void DrawSample(const char* type, ZSample* sample, bool* modified) {
             }
         }
     }
+    ImGui::Unindent();
 }
 
 static void WriteEnvData(ZEnvelope* zEnvs, unsigned int numEnvelopes, tinyxml2::XMLElement* envDoc) {
