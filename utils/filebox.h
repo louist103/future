@@ -22,6 +22,7 @@ constexpr const char PATH_SEPARATOR = '/';
 
 enum class FileBoxType {
 	Archive,
+    Audio,
 	Max,
 };
 

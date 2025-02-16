@@ -6,12 +6,30 @@
 #include "WindowMgr.h"
 #include "imgui_internal.h"
 #include "filebox.h"
+#include "mio.hpp"
+#include "zip_archive.h"
+#include "mpq_archive.h"
+#include "CustomStreamedAudio.h"
+#include "dr_mp3.h"
+#include "dr_wav.h"
+#include "dr_flac.h"
 
-static void DrawSample(const char* type, ZSample* sample);
+// 'ID3' as a string
+#define MP3_ID3_CHECK(d) ((d[0] == 'I') && (d[1] == 'D') && (d[2] == '3'))
+// FF FB, FF F2, FF F3
+#define MP3_NON_ID3_CHECK(d) ((d[0] == 0xFF) && ((d[1] == 0xFB) || (d[1] == 0xF2) || (d[1] == 0xF3)))
+#define MP3_CHECK(d) (MP3_ID3_CHECK(d) || MP3_NON_ID3_CHECK(d))
+
+#define WAV_CHECK(d) ((d[0] == 'R') && (d[1] == 'I') && (d[2] == 'F') && (d[3] == 'F'))
+
+#define FLAC_CHECK(d) ((d[0] == 'f') && (d[1] == 'L') && (d[2] == 'a') && (d[3] == 'C'))
+
+#define OGG_CHECK(d) ((d[0] == 'O') && (d[1] == 'g') && (d[2] == 'g') && (d[3] == 'S'))
+
+
+static void DrawSample(const char* type, ZSample* sample, bool* modified);
 
 #define TAG_SIZE(n) (sizeof(n) + sizeof(void*)*2)
-
-
 
 static const char* GetMediumStr(uint8_t medium) {
     switch (medium) {
@@ -43,6 +61,17 @@ static const char* GetCachePolicyStr(uint8_t policy) {
         default:
             return "ERROR";
     }
+}
+// strup but using `new` for compatibility with the file box API
+static const char* StrDupNew(const char* orig) {
+    if (orig == nullptr) {
+        return nullptr;
+    }
+    size_t len = strlen(orig);
+    const char* newStr = new char[len + 1];
+    memset(const_cast<char*>(newStr), 0, len);
+    strcpy(const_cast<char*>(newStr), orig);
+    return newStr;
 }
 
 CustomSoundFontWindow::CustomSoundFontWindow() {
@@ -94,10 +123,15 @@ void CustomSoundFontWindow::DrawWindow() {
     }
 
     if (sfParsed) {
-ImGui::SameLine();
+        ImGui::SameLine();
         if (ImGui::Button("Save")) {
             Save();
         }
+        ImGui::SameLine();
+        ImGui::TextUnformatted("Save Patch Only");
+        ImGui::SetItemTooltip("Only save instruments, drums, and SFX that are modified.\nRecommended for compatability with other packs.");
+        ImGui::SameLine();
+        ImGui::Checkbox("##patchonly", &mExportPatchOnly);
 
         char* sfStr = strrchr(mPathBuff, PATH_SEPARATOR);
         if (sfStr == nullptr) {
@@ -119,14 +153,13 @@ ImGui::SameLine();
         }
     }
 end:
-    ImGui::PopStyleColor();
     ImGui::End();
 }
 
 void CustomSoundFontWindow::ParseSoundFont() {
     tinyxml2::XMLElement *root = mDoc.FirstChildElement("SoundFont");
-    mSoundFont.medium = root->Attribute("Medium");
-    mSoundFont.cachePolicy = root->Attribute("CachePolicy");
+    mSoundFont.medium = StrDupNew(root->Attribute("Medium"));
+    mSoundFont.cachePolicy = StrDupNew(root->Attribute("CachePolicy"));
     mSoundFont.version = root->UnsignedAttribute("Version");
     mSoundFont.index = root->UnsignedAttribute("Num");
     mSoundFont.data1 = root->UnsignedAttribute("Data1");
@@ -159,8 +192,6 @@ uint8_t CustomSoundFontWindow::ParseEnvelopes(tinyxml2::XMLElement* envsELem, ZE
         i++;
     }
     return i;
-    // return true;
-
 }
 
 void CustomSoundFontWindow::ParseDrums(tinyxml2::XMLElement* drumsElem) {
@@ -172,7 +203,7 @@ void CustomSoundFontWindow::ParseDrums(tinyxml2::XMLElement* drumsElem) {
         mSoundFont.drums[i].releaseRate = drum->UnsignedAttribute("ReleaseRate");
         mSoundFont.drums[i].pan = drum->UnsignedAttribute("Pan");
         mSoundFont.drums[i].sample.tuning = drum->FloatAttribute("Tuning");
-        mSoundFont.drums[i].sample.path = drum->Attribute("SampleRef");
+        mSoundFont.drums[i].sample.path = StrDupNew(drum->Attribute("SampleRef"));
         tinyxml2::XMLElement* envs = drum->FirstChildElement("Envelopes");
         mSoundFont.drums[i].numEnvelopes = ParseEnvelopes(envs, &mSoundFont.drums[i].envs);
         drum = drum->NextSiblingElement("Drum");
@@ -191,18 +222,19 @@ void CustomSoundFontWindow::ParseInstruments(tinyxml2::XMLElement* instrumentsEl
         mSoundFont.instruments[i].normalRangeLo = instrument->UnsignedAttribute("NormalRangeLo");
         mSoundFont.instruments[i].normalRangeHi = instrument->UnsignedAttribute("NormalRangeHi");
         mSoundFont.instruments[i].releaseRate = instrument->UnsignedAttribute("ReleaseRate");
+
         tinyxml2::XMLElement* instChild = instrument->FirstChildElement();
         while (instChild != nullptr) {
             if (strcmp(instChild->Name(), "Envelopes") == 0) {
                 mSoundFont.instruments[i].numEnvelopes = ParseEnvelopes(instChild, &mSoundFont.instruments[i].envs);
             } else if (strcmp(instChild->Name(), "LowNotesSound") == 0) {
-                mSoundFont.instruments[i].lowNoteSound.path = instChild->Attribute("SampleRef");
+                mSoundFont.instruments[i].lowNoteSound.path = StrDupNew(instChild->Attribute("SampleRef"));
                 mSoundFont.instruments[i].lowNoteSound.tuning = instChild->FloatAttribute("Tuning");
             } else if (strcmp(instChild->Name(), "NormalNotesSound") == 0) {
-                mSoundFont.instruments[i].normalNoteSound.path = instChild->Attribute("SampleRef");
+                mSoundFont.instruments[i].normalNoteSound.path = StrDupNew(instChild->Attribute("SampleRef"));
                 mSoundFont.instruments[i].normalNoteSound.tuning = instChild->FloatAttribute("Tuning");
             } else if (strcmp(instChild->Name(), "HighNotesSound") == 0) {
-                mSoundFont.instruments[i].highNoteSound.path = instChild->Attribute("SampleRef");
+                mSoundFont.instruments[i].highNoteSound.path = StrDupNew(instChild->Attribute("SampleRef"));
                 mSoundFont.instruments[i].highNoteSound.tuning = instChild->FloatAttribute("Tuning");
             }
             instChild = instChild->NextSiblingElement();
@@ -218,7 +250,7 @@ void CustomSoundFontWindow::ParseSfxTbl(tinyxml2::XMLElement *sfxTblElem) {
     tinyxml2::XMLElement* sfxElem = sfxTblElem->FirstChildElement("Sfx");
     unsigned int i = 0;
     while (sfxElem != nullptr) {
-        mSoundFont.sfx[i].sample.path = sfxElem->Attribute("SampleRef");
+        mSoundFont.sfx[i].sample.path = StrDupNew(sfxElem->Attribute("SampleRef"));
         mSoundFont.sfx[i].sample.tuning = sfxElem->FloatAttribute("Tuning");
         sfxElem = sfxElem->NextSiblingElement("Sfx");
         i++;
@@ -228,6 +260,9 @@ void CustomSoundFontWindow::ParseSfxTbl(tinyxml2::XMLElement *sfxTblElem) {
 void CustomSoundFontWindow::ClearSoundFont() {
     for (unsigned int i = 0; i < mSoundFont.numDrums; i++) {
         delete[] mSoundFont.drums[i].envs;
+        if (mSoundFont.drums[i].sample.path != nullptr) {
+            delete[] mSoundFont.drums[i].sample.path;
+        }
     }
     mSoundFont.numDrums = 0;
     if (mSoundFont.drums != nullptr) {
@@ -244,6 +279,8 @@ void CustomSoundFontWindow::ClearSoundFont() {
         mSoundFont.instruments = nullptr;
     }
     delete[] mSoundFont.sfx;
+    delete[] mSoundFont.medium;
+    delete[] mSoundFont.cachePolicy;
 }
 
 void CustomSoundFontWindow::DrawHeader(bool locked) const{
@@ -279,18 +316,25 @@ void CustomSoundFontWindow::DrawDrums(bool locked) const {
         auto tuningTag = std::make_unique<char[]>(TAG_SIZE("##"));
         auto envTag = std::make_unique<char[]>(TAG_SIZE("##"));
         for (unsigned int i = 0; i < mSoundFont.numDrums; i++) {
-            DrawSample("Drum", &mSoundFont.drums[i].sample);
-            ImGui::Text("Num Envelopes: %d", mSoundFont.drums[i].numEnvelopes);
+            bool modified = false;
+            DrawSample("Drum", &mSoundFont.drums[i].sample, &modified);
             sprintf(envTreeTag.get(), "Envelopes(%u)", mSoundFont.drums[i].numEnvelopes);
             if (ImGui::TreeNodeEx(mSoundFont.drums[i].envs, ImGuiTreeNodeFlags_None, envTreeTag.get())) {
                 for (unsigned int j = 0; j < mSoundFont.drums[i].numEnvelopes; j++) {
                     sprintf(envTag.get(), "Delay##%p", (&mSoundFont.drums[i].envs[j]));
-                    ImGui::InputScalarN(envTag.get(), ImGuiDataType_S16, &mSoundFont.drums[i].envs[j].delay, 1);
+                    if (ImGui::InputScalarN(envTag.get(), ImGuiDataType_S16, &mSoundFont.drums[i].envs[j].delay, 1)) {
+                        modified = true;
+                    }
                     ImGui::SameLine();
                     sprintf(envTag.get(), "Arg##%p", (&mSoundFont.drums[i].envs[j]) + 1);
-                    ImGui::InputScalarN(envTag.get(), ImGuiDataType_S16, &mSoundFont.drums[i].envs[j].arg, 1);
+                    if (ImGui::InputScalarN(envTag.get(), ImGuiDataType_S16, &mSoundFont.drums[i].envs[j].arg, 1)) {
+                        modified = true;
+                    }
                 }
                 ImGui::TreePop();
+            }
+            if (modified) {
+                mSoundFont.drums[i].modified = true;
             }
         }
         ImGui::TreePop();
@@ -308,9 +352,8 @@ void CustomSoundFontWindow::DrawInstruments(bool locked) const {
         auto rangeLoTag = std::make_unique<char[]>(TAG_SIZE("##"));
         auto rangeHiTag = std::make_unique<char[]>(TAG_SIZE("##"));
         auto releaseRateTag = std::make_unique<char[]>(TAG_SIZE("##"));
-        //auto tuningTag = std::make_unique<char[]>(TAG_SIZE("##"));
-        //auto sampleButtonTag = std::make_unique<char[]>(TAG_SIZE(ICON_FA_PENCIL"##"));
         for (unsigned int i = 0; i < mSoundFont.numInstruments; i++) {
+            bool modified = false;
             sprintf(checkboxTag.get(), "##%p", &mSoundFont.instruments[i].isValid);
             sprintf(rangeLoTag.get(), "##%p", &mSoundFont.instruments[i].normalRangeLo);
             sprintf(rangeHiTag.get(), "##%p", &mSoundFont.instruments[i].normalRangeHi);
@@ -321,71 +364,27 @@ void CustomSoundFontWindow::DrawInstruments(bool locked) const {
             ImGui::SameLine();
             ImGui::TextUnformatted("  Range Low ");
             ImGui::SameLine();
-            ImGui::InputScalarN(rangeLoTag.get(), ImGuiDataType_U8, &mSoundFont.instruments[i].normalRangeLo, 1);
+            if (ImGui::InputScalarN(rangeLoTag.get(), ImGuiDataType_U8, &mSoundFont.instruments[i].normalRangeLo, 1)) {
+                modified = true;
+            }
             ImGui::SameLine();
             ImGui::TextUnformatted("  Range Hi ");
             ImGui::SameLine();
-            ImGui::InputScalarN(rangeHiTag.get(), ImGuiDataType_U8, &mSoundFont.instruments[i].normalRangeHi, 1);
+            if (ImGui::InputScalarN(rangeHiTag.get(), ImGuiDataType_U8, &mSoundFont.instruments[i].normalRangeHi, 1)) {
+                modified = true;
+            }
             ImGui::SameLine();
             ImGui::TextUnformatted("  Release Rate ");
             ImGui::SameLine();
-            ImGui::InputScalarN(releaseRateTag.get(), ImGuiDataType_U8, &mSoundFont.instruments[i].releaseRate, 1);
-
-            DrawSample("Low Note Sound", &mSoundFont.instruments[i].lowNoteSound);
-            DrawSample("Normal Note Sound", &mSoundFont.instruments[i].normalNoteSound);
-            DrawSample("High Note Sound", &mSoundFont.instruments[i].highNoteSound);
-#if 0
-            if (mSoundFont.instruments[i].lowNoteSound.path != nullptr) {
-                ImGui::Text("Low Note Sound %s  ", mSoundFont.instruments[i].lowNoteSound.path);
-                sprintf(tuningTag.get(), "##%p", &mSoundFont.instruments[i].lowNoteSound);
-                ImGui::SameLine();
-                ImGui::TextUnformatted("Tuning");
-                ImGui::SameLine();
-                ImGui::InputScalarN(tuningTag.get(), ImGuiDataType_Float, &mSoundFont.instruments[i].lowNoteSound.tuning, 1);
-            } else {
-                ImGui::TextUnformatted("Low Note Sound Empty");
+            if (ImGui::InputScalarN(releaseRateTag.get(), ImGuiDataType_U8, &mSoundFont.instruments[i].releaseRate, 1)) {
+                modified = true;
             }
-
-            if (mSoundFont.instruments[i].normalNoteSound.path != nullptr) {
-                ImGui::Text("Medium Note Sound %s  ", mSoundFont.instruments[i].normalNoteSound.path);
-                sprintf(tuningTag.get(), "##%p", &mSoundFont.instruments[i].normalNoteSound);
-                sprintf(sampleButtonTag.get(), "%s##%p", ICON_FA_PENCIL, &mSoundFont.instruments[i].normalNoteSound);
-                ImGui::SameLine();
-                ImGui::Button(sampleButtonTag.get());
-                ImGui::SameLine();
-                ImGui::TextUnformatted("Tuning");
-                ImGui::SameLine();
-                ImGui::InputScalarN(tuningTag.get(), ImGuiDataType_Float, &mSoundFont.instruments[i].normalNoteSound.tuning, 1);
-            } else {
-                ImGui::TextUnformatted("Medium Note Sound Empty");
+            DrawSample("Low Note Sound", &mSoundFont.instruments[i].lowNoteSound, &modified);
+            DrawSample("Normal Note Sound", &mSoundFont.instruments[i].normalNoteSound, &modified);
+            DrawSample("High Note Sound", &mSoundFont.instruments[i].highNoteSound, &modified);
+            if (modified) {
+                mSoundFont.instruments[i].modified = true;
             }
-
-            if (mSoundFont.instruments[i].highNoteSound.path != nullptr) {
-                ImGui::Text("Hi Note Sound %s  ", mSoundFont.instruments[i].highNoteSound.path);
-                sprintf(tuningTag.get(), "##%p", &mSoundFont.instruments[i].highNoteSound);
-                ImGui::SameLine();
-                ImGui::TextUnformatted("Tuning");
-                ImGui::SameLine();
-                ImGui::InputScalarN(tuningTag.get(), ImGuiDataType_Float, &mSoundFont.instruments[i].highNoteSound.tuning, 1);
-            } else {
-                ImGui::TextUnformatted("Hi Note Sound Empty");
-            }
-            sprintf(envTreeTag.get(), "Envelopes(%u)", mSoundFont.drums[i].numEnvelopes);
-            if (ImGui::TreeNodeEx(mSoundFont.drums[i].envs, ImGuiTreeNodeFlags_None, envTreeTag.get())) {
-                for (unsigned int j = 0; j < mSoundFont.drums[i].numEnvelopes; j++) {
-                    sprintf(envTag.get(), "##%p", (&mSoundFont.drums[i].envs[j]));
-                    ImGui::TextUnformatted("Delay ");
-                    ImGui::SameLine();
-                    ImGui::InputScalarN(envTag.get(), ImGuiDataType_S16, &mSoundFont.drums[i].envs[j].delay, 1);
-                    ImGui::SameLine();
-                    sprintf(envTag.get(), "##%p", (&mSoundFont.drums[i].envs[j]) + 1);
-                    ImGui::TextUnformatted("Arg ");
-                    ImGui::SameLine();
-                    ImGui::InputScalarN(envTag.get(), ImGuiDataType_S16, &mSoundFont.drums[i].envs[j].arg, 1);
-                }
-                ImGui::TreePop();
-            }
-#endif
         }
 
         ImGui::TreePop();
@@ -399,33 +398,23 @@ void CustomSoundFontWindow::DrawSfxTbl(bool locked) const {
         auto tuningTag = std::make_unique<char[]>(TAG_SIZE("##"));
 
         for (unsigned int i = 0; i < mSoundFont.numSfx; i++) {
-            DrawSample("Sfx", &mSoundFont.sfx[i].sample);
-#if 0
-            ImGui::Text("%u  ", i);
-            ImGui::SameLine();
-            if (mSoundFont.sfx[i].sample.path != nullptr) {
-                ImGui::Text("Sample %s  ", mSoundFont.sfx[i].sample.path);
-                ImGui::SameLine();
-                ImGui::TextUnformatted("Tuning ");
-                ImGui::SameLine();
-                sprintf(tuningTag.get(), "##%p", &mSoundFont.sfx[i].sample.tuning);
-                ImGui::InputScalarN(tuningTag.get(), ImGuiDataType_Float, &mSoundFont.sfx[i].sample.tuning, 1);
-            } else {
-                ImGui::TextUnformatted("Empty");
+            bool modified;
+            DrawSample("Sfx", &mSoundFont.sfx[i].sample, &modified);
+            if (modified) {
+                mSoundFont.sfx[i].modified = true;
             }
-#endif
         }
     }
 }
 
-static void DrawSample(const char* type, ZSample* sample) {
+static void DrawSample(const char* type, ZSample* sample, bool* modified) {
     auto sampleButtonTag = std::make_unique<char[]>(TAG_SIZE(ICON_FA_PENCIL"##"));
     sprintf(sampleButtonTag.get(), "%s##%p", ICON_FA_PENCIL, &sample->path);
     if (sample->path != nullptr) {
         auto tuningTag = std::make_unique<char[]>(TAG_SIZE("##"));
 
         //ImGui::Text("%s %s  ",type, sample->path);
-        const char* sampleStart = strrchr(sample->path, PATH_SEPARATOR);
+        const char* sampleStart = strrchr(sample->path, PATH_SEPARATOR) + 1;
         const char* sampleEnd = strrchr(sample->path, '_');
         ImGui::Text("%s", type);
         ImGui::SameLine();
@@ -439,13 +428,16 @@ static void DrawSample(const char* type, ZSample* sample) {
         ImGui::SameLine();
         ImGui::TextUnformatted("Tuning");
         ImGui::SameLine();
-        ImGui::InputScalarN(tuningTag.get(), ImGuiDataType_Float, &sample->tuning, 1);
+        if (ImGui::InputScalarN(tuningTag.get(), ImGuiDataType_Float, &sample->tuning, 1)) {
+            *modified = true;
+        }
     } else {
         ImGui::Text("%s Empty", type);
+        ImGui::SameLine();
         if (ImGui::Button(sampleButtonTag.get())) {
             openNewSample:
             if (GetOpenFilePath(const_cast<char**>(&sample->path), FileBoxType::Max)) {
-                sample->modified = true;
+                *modified = true;
                 // At this point `path` contains a path to a location on disk, it will be converted and added to the archive when saved.
             }
         }
@@ -464,20 +456,90 @@ static void WriteEnvData(ZEnvelope* zEnvs, unsigned int numEnvelopes, tinyxml2::
     envDoc->InsertEndChild(envs);
 }
 
-static void WriteInstrument(ZSample* zSample, tinyxml2::XMLElement* instrument, const char* name) {
+extern std::unique_ptr<char[]> CopySampleData(char* input, char* fileName, bool fromDisk, size_t size, Archive* a);
+extern std::unique_ptr<char[]> CreateSampleXml(char* fileName, const char* audioType, uint64_t numFrames, uint64_t numChannels, SeqMetaInfo* info, uint64_t sampleRate, bool loopTimeInSamples, Archive* a);
+
+enum AudioType {
+    mp3,
+    wav,
+    ogg,
+    flac,
+};
+
+constexpr static char fontXmlBase[] = "custom/fonts/";
+constexpr static char sampleNameBase[] = "custom/samples/";
+constexpr static char sampleDataBase[] = "custom/sampleData/";
+constexpr static char sampleXmlBase[] = "custom/samples/";
+
+static void SaveSample(ZSample* sample, tinyxml2::XMLElement* elem, Archive* a) {
+    if (sample->path != nullptr) {
+        if (sample->path[0] == '/') {
+            std::unique_ptr<char[]> samplePath;
+            std::unique_ptr<char[]> sampleXmlPath;
+            const char* fileName = strrchr(sample->path, '/');
+            fileName++;
+            char* archivePath;
+            uint32_t numChannels;
+            uint64_t sampleRate;
+            uint64_t numFrames;
+
+            mio::mmap_source file(sample->path);
+            if (WAV_CHECK(file.data())) {
+                drwav wav;
+                drwav_init_memory(&wav, file.data(), file.size(), nullptr);
+                numChannels = wav.channels;
+                sampleRate = wav.sampleRate;
+                numFrames = wav.totalPCMFrameCount;
+                SeqMetaInfo info;
+                info.fanfare = true;
+                info.loopEnd.i = numFrames;
+                info.loopStart.i = 0;
+
+                if (!(wav.translatedFormatTag == DR_WAVE_FORMAT_PCM && wav.bitsPerSample == 16)) {
+                    // Uh oh
+                    return;
+                }
+                sampleXmlPath = CreateSampleXml(const_cast<char*>(fileName), "wav", numFrames, numChannels, &info, sampleRate, true, a);
+                CopySampleData(const_cast<char*>(sample->path), const_cast<char*>(fileName), true, file.size(), a);
+
+            } else if (MP3_CHECK(file.data())) {
+
+            } else if (FLAC_CHECK(file.data())) {
+
+            } else if (OGG_CHECK(file.data())) {
+
+            }
+            elem->SetAttribute("SampleRef", sampleXmlPath.get());
+            elem->SetAttribute("Tuning", ((float)sampleRate * (float)numChannels) / 32000.0f);
+            return;
+        }
+    }
+    elem->SetAttribute("SampleRef", sample->path);
+    elem->SetAttribute("Tuning", sample->tuning);
+}
+
+static void WriteInstrument(ZSample* zSample, tinyxml2::XMLElement* instrument, const char* name, Archive* a) {
     tinyxml2::XMLElement* inst = instrument->InsertNewChildElement(name);
     if (zSample->path != nullptr) {
-        inst->SetAttribute("SampleRef", zSample->path);
-        inst->SetAttribute("Tuning", zSample->tuning);
+        SaveSample(zSample, inst, a);
+        //inst->SetAttribute("SampleRef", zSample->path);
+        //inst->SetAttribute("Tuning", zSample->tuning);
     }
     instrument->InsertEndChild(inst);
 }
 
 void CustomSoundFontWindow::Save() {
     char* outBuffer = nullptr;
+    ZipArchive a;
+
     GetSaveFilePath(&outBuffer);
+    a.OpenArchive(outBuffer);
+    char* sfStr = strrchr(mPathBuff, PATH_SEPARATOR);
+    sfStr++;
+
     tinyxml2::XMLDocument outDoc;
     tinyxml2::XMLElement* root = outDoc.NewElement("SoundFont");
+
     root->SetAttribute("Version", 0);
     root->SetAttribute("Num", mSoundFont.index);
     root->SetAttribute("Medium", mSoundFont.medium);
@@ -485,49 +547,74 @@ void CustomSoundFontWindow::Save() {
     root->SetAttribute("Data1", mSoundFont.data1);
     root->SetAttribute("Data2", mSoundFont.data2);
     root->SetAttribute("Data3", mSoundFont.data3);
+    root->SetAttribute("Patches", sfStr);
     outDoc.InsertFirstChild(root);
     tinyxml2::XMLElement* drums = root->InsertNewChildElement("Drums");
     drums->SetAttribute("Count", mSoundFont.numDrums);
     for (unsigned int i = 0; i < mSoundFont.numDrums; i++) {
-        tinyxml2::XMLElement* drum = drums->InsertNewChildElement("Drum");
-        drum->SetAttribute("ReleaseRate", mSoundFont.drums[i].releaseRate);
-        drum->SetAttribute("Pan", mSoundFont.drums[i].pan);
-        drum->SetAttribute("Loaded", 0);
-        drum->SetAttribute("SampleRef", mSoundFont.drums[i].sample.path);
-        drum->SetAttribute("Tuning", mSoundFont.drums[i].sample.tuning);
-        WriteEnvData(mSoundFont.drums[i].envs, mSoundFont.drums[i].numEnvelopes, drum);
-        drums->InsertEndChild(drum);
+        if (!mExportPatchOnly || mSoundFont.drums[i].modified) {
+            tinyxml2::XMLElement* drum = drums->InsertNewChildElement("Drum");
+            drum->SetAttribute("ReleaseRate", mSoundFont.drums[i].releaseRate);
+            drum->SetAttribute("Pan", mSoundFont.drums[i].pan);
+            drum->SetAttribute("Loaded", 0);
+            SaveSample(&mSoundFont.drums[i].sample, drum, &a);
+            WriteEnvData(mSoundFont.drums[i].envs, mSoundFont.drums[i].numEnvelopes, drum);
+            if (mExportPatchOnly && mSoundFont.drums[i].modified) { // If we aren't exporting only the changes, it doesn't matter which entry is being modified
+                drum->SetAttribute("Patches", i);
+            }
+            drums->InsertEndChild(drum);
+        }
     }
     root->InsertEndChild(drums);
 
     tinyxml2::XMLElement* instruments = root->InsertNewChildElement("Instruments");
     instruments->SetAttribute("Count", mSoundFont.numInstruments);
     for (unsigned int i = 0; i < mSoundFont.numInstruments; i++) {
-        tinyxml2::XMLElement* instrument = instruments->InsertNewChildElement("Instrument");
-
-        instrument->SetAttribute("IsValid", mSoundFont.instruments[i].isValid);
-        instrument->SetAttribute("Loaded", 0);
-        instrument->SetAttribute("NormalRangeLo", mSoundFont.instruments[i].normalRangeLo);
-        instrument->SetAttribute("NormalRangeHi", mSoundFont.instruments[i].normalRangeHi);
-        instrument->SetAttribute("ReleaseRate", mSoundFont.instruments[i].releaseRate);
-        WriteEnvData(mSoundFont.instruments[i].envs, mSoundFont.instruments[i].numEnvelopes, instrument);
-        WriteInstrument(&mSoundFont.instruments[i].lowNoteSound, instrument, "LowNotesSound");
-        WriteInstrument(&mSoundFont.instruments[i].normalNoteSound, instrument, "NormalNotesSound");
-        WriteInstrument(&mSoundFont.instruments[i].highNoteSound, instrument, "HighNotesSound");
-        instruments->InsertEndChild(instrument);
+        if (!mExportPatchOnly || mSoundFont.instruments[i].modified) {
+            tinyxml2::XMLElement* instrument = instruments->InsertNewChildElement("Instrument");
+            instrument->SetAttribute("IsValid", mSoundFont.instruments[i].isValid);
+            instrument->SetAttribute("Loaded", 0);
+            instrument->SetAttribute("NormalRangeLo", mSoundFont.instruments[i].normalRangeLo);
+            instrument->SetAttribute("NormalRangeHi", mSoundFont.instruments[i].normalRangeHi);
+            instrument->SetAttribute("ReleaseRate", mSoundFont.instruments[i].releaseRate);
+            if (mExportPatchOnly && mSoundFont.instruments[i].modified) {
+                instrument->SetAttribute("Patches", i);
+            }
+            WriteEnvData(mSoundFont.instruments[i].envs, mSoundFont.instruments[i].numEnvelopes, instrument);
+            WriteInstrument(&mSoundFont.instruments[i].lowNoteSound, instrument, "LowNotesSound", &a);
+            WriteInstrument(&mSoundFont.instruments[i].normalNoteSound, instrument, "NormalNotesSound", &a);
+            WriteInstrument(&mSoundFont.instruments[i].highNoteSound, instrument, "HighNotesSound", &a);
+            instruments->InsertEndChild(instrument);
+        }
     }
     root->InsertEndChild(instruments);
 
     tinyxml2::XMLElement* sfxTbl = root->InsertNewChildElement("SfxTable");
     sfxTbl->SetAttribute("Count", mSoundFont.numSfx);
     for (unsigned int i = 0; i < mSoundFont.numSfx; i++) {
-        WriteInstrument(&mSoundFont.sfx[i].sample, sfxTbl, "Sfx");
+        if (!mExportPatchOnly || mSoundFont.sfx[i].modified) {
+            tinyxml2::XMLElement* inst = sfxTbl->InsertNewChildElement("Sfx");
+            if (mSoundFont.sfx[i].sample.path != nullptr) {
+                SaveSample(&mSoundFont.sfx[i].sample, inst, &a);
+                //inst->SetAttribute("SampleRef", mSoundFont.sfx[i].sample.path);
+                //inst->SetAttribute("Tuning", mSoundFont.sfx[i].sample.tuning);
+                if (mExportPatchOnly && mSoundFont.sfx[i].modified) {
+                    inst->SetAttribute("Patches", i);
+                }
+            }
+            sfxTbl->InsertEndChild(inst);
+        }
     }
     root->InsertEndChild(sfxTbl);
     outDoc.InsertEndChild(root);
-    FILE* outFile = fopen(outBuffer, "w");
     tinyxml2::XMLPrinter printer;
     outDoc.Accept(&printer);
-    fwrite(printer.CStr(), printer.CStrSize() - 1, 1, outFile);
-    fclose(outFile);
+    ArchiveDataInfo info = {
+        .data = (void*)printer.CStr(), .size = printer.CStrSize() - 1, .mode = DataCopy
+    };
+    auto outSfPath = std::make_unique<char[]>(sizeof(fontXmlBase) + strlen(sfStr) + sizeof("_PATCH") + 1);
+    sprintf(outSfPath.get(), "%s%s_PATCH", fontXmlBase, sfStr);
+    a.WriteFile(outSfPath.get(), &info);
+    a.CloseArchive();
+    delete[] outBuffer;
 }

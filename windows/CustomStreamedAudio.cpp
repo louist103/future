@@ -106,7 +106,7 @@ static void PcmS16ToF(float* dst, const int16_t* src, const uint64_t numFrames) 
 }
 
 // Write `data` to either the archive, or if the archive is null, a file on disk
-static void WriteFileData(char* path, void* data, size_t size, Archive* a) {
+void WriteFileData(char* path, void* data, size_t size, Archive* a) {
     if (a == nullptr) {
         FILE* file = fopen(path, "wb+");
         fwrite(data, size, 1, file);
@@ -121,7 +121,7 @@ static void WriteFileData(char* path, void* data, size_t size, Archive* a) {
 }
 
 // If the data comes from memory, `input` is used as the source buffer.
-static void CopySampleData(char* input, char* fileName, bool fromDisk, size_t size, Archive* a) {
+std::unique_ptr<char[]> CopySampleData(char* input, char* fileName, bool fromDisk, size_t size, Archive* a) {
     size_t sampleDataPathLen = sizeof(sampleDataBase) + strlen(fileName) + 1;
     auto sampleDataPath = std::make_unique<char[]>(sampleDataPathLen);
     snprintf(sampleDataPath.get(), sampleDataPathLen, "%s%s", sampleDataBase, fileName);
@@ -140,9 +140,10 @@ static void CopySampleData(char* input, char* fileName, bool fromDisk, size_t si
         };
         a->WriteFile(sampleDataPath.get(), &info);
     }
+    return sampleDataPath;
 }
 
-static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numFrames, uint64_t numChannels, SeqMetaInfo* info, uint64_t sampleRate, bool loopTimeInSamples, Archive* a) {
+std::unique_ptr<char[]> CreateSampleXml(char* fileName, const char* audioType, uint64_t numFrames, uint64_t numChannels, SeqMetaInfo* info, uint64_t sampleRate, bool loopTimeInSamples, Archive* a) {
     tinyxml2::XMLDocument sampleBaseRoot;
     tinyxml2::XMLError e = sampleBaseRoot.LoadFile("assets/sample-base.xml");
     if (e != 0) {
@@ -213,6 +214,7 @@ static void CreateSampleXml(char* fileName, const char* audioType, uint64_t numF
     WriteFileData(sampleXmlPath.get(), (void*)p.CStr(), p.CStrSize() - 1, a);
 
     p.ClearBuffer();
+    return sampleXmlPath;
 }
 
 static void CreateSequenceXml(char* fileName, char* fontPath, unsigned int length, bool isFanfare, bool stereo, Archive* a) {

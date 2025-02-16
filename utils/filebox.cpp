@@ -78,7 +78,7 @@ bool GetOpenFilePath(char** inputBuffer, FileBoxType type) {
     if (FAILED(hr)) {
         return false;
     }
-    COMDLG_FILTERSPEC filters[3] = { 0 };
+    COMDLG_FILTERSPEC filters[6] = { 0 };
     switch (type) {
         case FileBoxType::Archive: {
             filters[0].pszName = L"All Supported Archives";
@@ -88,6 +88,23 @@ bool GetOpenFilePath(char** inputBuffer, FileBoxType type) {
             filters[2].pszName = L"O2R Archives";
             filters[2].pszSpec = L"*.O2R;*.ZIP";
             pfd->SetFileTypes(3, filters);
+            break;
+        }
+        case FileBoxType::Audio: {
+            filters[0].pszName = L"All Supported Formats";
+            filters[0].pszSpec = L"*.WAV;*.MP3;*.FLAC;*.OGG;*.OPUS";
+            filters[1].pszName = L"WAV Files";
+            filters[1].pszSpec = L"*.WAV";
+            filters[2].pszName = L"MP3 Files";
+            filters[2].pszSpec = L"*.MP3";
+            filters[3].pszName = L"FLAC Files";
+            filters[3].pszSpec = L"*.FLAC";
+            filters[4].pszName = L"OGG Files";
+            filters[4].pszSpec = L"*.OGG";
+            filters[5].pszName = L"OPUS Files";
+            filters[5].pszSpec = L"*.OPUS";
+            pfd->SetFileTypes(6, filters);
+            break;
         }
     }
     DWORD options;
@@ -114,8 +131,16 @@ bool GetOpenFilePath(char** inputBuffer, FileBoxType type) {
     }
     pfd->Release();
 #elif defined(__linux__) || defined(__APPLE__)
-    //std::vector<std::string> filters;
-    auto selection = pfd::open_file("Select a file", ".", { "All Supported Archives", "*.otr *.mpq *.o2r *.zip", "OTR Archives", "*.otr *.mpq", "O2R Archives", "*.o2r *.zip",}).result();
+    std::vector<std::string> filters;
+    switch (type) {
+        case FileBoxType::Archive:
+            filters = { "All Supported Archives", "*.otr *.mpq *.o2r *.zip", "OTR Archives", "*.otr *.mpq", "O2R Archives", "*.o2r *.zip"};
+        break;
+        case FileBoxType::Audio:
+            filters = {"All Supported Formats", "*.wav *.flac *.mp3 *.ogg *.opus", "WAV Files", "*.wav", "FLAC Files", "*.flac", "MP3 Files", "*.mp3", "OGG Files", "*.ogg", "OPUS Files", "*.opus"};
+
+    }
+    auto selection = pfd::open_file("Select a file", ".", filters).result();
 
     if (selection.empty()) {
         return false;

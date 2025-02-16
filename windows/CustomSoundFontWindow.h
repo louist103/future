@@ -11,7 +11,6 @@
 struct ZSample {
     const char* path;
     float tuning;
-    bool modified;
 };
 
 struct ZEnvelope {
@@ -25,6 +24,8 @@ struct ZDrum {
     uint8_t numEnvelopes;
     uint8_t releaseRate;
     uint8_t pan;
+    // variables to track modifications
+    bool modified = false;;
 };
 
 struct ZInstrument {
@@ -37,10 +38,14 @@ struct ZInstrument {
     uint8_t normalRangeLo;
     uint8_t normalRangeHi;
     uint8_t releaseRate;
+    // variables to track modifications
+    bool modified = false;;
 };
 
 struct ZSfxTbl {
     ZSample sample;
+    // variables to track modifications
+    bool modified = false;;
 };
 
 struct ZSoundFont {
@@ -86,6 +91,7 @@ private:
     ZSoundFont mSoundFont {};
     bool sfParsed = false;
     bool mSfLocked = false;
+    bool mExportPatchOnly = true;
 };
 
 
