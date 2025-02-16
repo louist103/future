@@ -26,7 +26,6 @@
 
 #define OGG_CHECK(d) ((d[0] == 'O') && (d[1] == 'g') && (d[2] == 'g') && (d[3] == 'S'))
 
-
 static void DrawSample(const char* type, ZSample* sample, bool* modified);
 
 #define TAG_SIZE(n) (sizeof(n) + sizeof(void*)*2)
@@ -75,7 +74,6 @@ static const char* StrDupNew(const char* orig) {
 }
 
 CustomSoundFontWindow::CustomSoundFontWindow() {
-
 }
 
 CustomSoundFontWindow::~CustomSoundFontWindow() {
@@ -309,26 +307,26 @@ void CustomSoundFontWindow::DrawHeader(bool locked) const{
 
 void CustomSoundFontWindow::DrawDrums(bool locked) const {
     ImGui::BeginDisabled(locked);
-    auto drumTreeTag = std::make_unique<char[]>(sizeof("Drums()") + 9);
-    auto envTreeTag = std::make_unique<char[]>(sizeof("Envelopes()") + 3);
-    sprintf(drumTreeTag.get(), "Drums(%u)", mSoundFont.numInstruments);
-    if (ImGui::TreeNode(drumTreeTag.get())) {
-        auto tuningTag = std::make_unique<char[]>(TAG_SIZE("##"));
-        auto envTag = std::make_unique<char[]>(TAG_SIZE("##"));
-        for (unsigned int i = 0; i < mSoundFont.numDrums; i++) {
+    char drumTreeTag[sizeof("Drums()") + 9];
+    sprintf(drumTreeTag, "Drums(%u)", mSoundFont.numDrums);
+    if (ImGui::TreeNode(drumTreeTag)) {
 
+        for (unsigned int i = 0; i < mSoundFont.numDrums; i++) {
             bool modified = false;
+            char envTreeTag[sizeof("Envelopes()") + 3];
+
             DrawSample("Drum", &mSoundFont.drums[i].sample, &modified);
-            sprintf(envTreeTag.get(), "Envelopes(%u)", mSoundFont.drums[i].numEnvelopes);
-            if (ImGui::TreeNodeEx(mSoundFont.drums[i].envs, ImGuiTreeNodeFlags_None, "%s", envTreeTag.get())) {
+            sprintf(envTreeTag, "Envelopes(%u)", mSoundFont.drums[i].numEnvelopes);
+            if (ImGui::TreeNodeEx(mSoundFont.drums[i].envs, ImGuiTreeNodeFlags_None, "%s", envTreeTag)) {
                 for (unsigned int j = 0; j < mSoundFont.drums[i].numEnvelopes; j++) {
-                    sprintf(envTag.get(), "Delay##%p", (&mSoundFont.drums[i].envs[j]));
-                    if (ImGui::InputScalarN(envTag.get(), ImGuiDataType_S16, &mSoundFont.drums[i].envs[j].delay, 1)) {
+                    char envTag[TAG_SIZE("##")];
+                    sprintf(envTag, "Delay##%p", (&mSoundFont.drums[i].envs[j]));
+                    if (ImGui::InputScalarN(envTag, ImGuiDataType_S16, &mSoundFont.drums[i].envs[j].delay, 1)) {
                         modified = true;
                     }
                     ImGui::SameLine();
-                    sprintf(envTag.get(), "Arg##%p", (&mSoundFont.drums[i].envs[j]) + 1);
-                    if (ImGui::InputScalarN(envTag.get(), ImGuiDataType_S16, &mSoundFont.drums[i].envs[j].arg, 1)) {
+                    sprintf(envTag, "Arg##%p", (&mSoundFont.drums[i].envs[j]) + 1);
+                    if (ImGui::InputScalarN(envTag, ImGuiDataType_S16, &mSoundFont.drums[i].envs[j].arg, 1)) {
                         modified = true;
                     }
                 }
@@ -345,40 +343,40 @@ void CustomSoundFontWindow::DrawDrums(bool locked) const {
 }
 
 void CustomSoundFontWindow::DrawInstruments(bool locked) const {
-    auto instTreeTag = std::make_unique<char[]>(sizeof("Instruments()") + 9);
-    auto envTreeTag = std::make_unique<char[]>(sizeof("Envelopes()") + 3);
-    sprintf(instTreeTag.get(), "Instruments(%u)", mSoundFont.numInstruments);
-    if (ImGui::TreeNode(instTreeTag.get())) {
-        auto envTag = std::make_unique<char[]>(TAG_SIZE("##"));
-        auto checkboxTag = std::make_unique<char[]>(TAG_SIZE("##"));
-        auto rangeLoTag = std::make_unique<char[]>(TAG_SIZE("##"));
-        auto rangeHiTag = std::make_unique<char[]>(TAG_SIZE("##"));
-        auto releaseRateTag = std::make_unique<char[]>(TAG_SIZE("##"));
+    char instTreeTag[sizeof("Instruments()") + 9];
+
+    sprintf(instTreeTag, "Instruments(%u)", mSoundFont.numInstruments);
+    if (ImGui::TreeNode(instTreeTag)) {
         for (unsigned int i = 0; i < mSoundFont.numInstruments; i++) {
             bool modified = false;
-            sprintf(checkboxTag.get(), "##%p", &mSoundFont.instruments[i].isValid);
-            sprintf(rangeLoTag.get(), "##%p", &mSoundFont.instruments[i].normalRangeLo);
-            sprintf(rangeHiTag.get(), "##%p", &mSoundFont.instruments[i].normalRangeHi);
-            sprintf(releaseRateTag.get(), "##%p", &mSoundFont.instruments[i].releaseRate);
+            char checkboxTag[TAG_SIZE("##")];
+            char rangeLoTag[TAG_SIZE("##")];
+            char rangeHiTag[TAG_SIZE("##")];
+            char releaseRateTag[TAG_SIZE("##")];
+
+            sprintf(checkboxTag, "##%p", &mSoundFont.instruments[i].isValid);
+            sprintf(rangeLoTag, "##%p", &mSoundFont.instruments[i].normalRangeLo);
+            sprintf(rangeHiTag, "##%p", &mSoundFont.instruments[i].normalRangeHi);
+            sprintf(releaseRateTag, "##%p", &mSoundFont.instruments[i].releaseRate);
             ImGui::TextUnformatted("Valid ");
             ImGui::SameLine();
-            ImGui::Checkbox(checkboxTag.get(), &mSoundFont.instruments[i].isValid);
+            ImGui::Checkbox(checkboxTag, &mSoundFont.instruments[i].isValid);
             ImGui::SameLine();
             ImGui::TextUnformatted("  Range Low ");
             ImGui::SameLine();
-            if (ImGui::InputScalarN(rangeLoTag.get(), ImGuiDataType_U8, &mSoundFont.instruments[i].normalRangeLo, 1)) {
+            if (ImGui::InputScalarN(rangeLoTag, ImGuiDataType_U8, &mSoundFont.instruments[i].normalRangeLo, 1)) {
                 modified = true;
             }
             ImGui::SameLine();
             ImGui::TextUnformatted("  Range Hi ");
             ImGui::SameLine();
-            if (ImGui::InputScalarN(rangeHiTag.get(), ImGuiDataType_U8, &mSoundFont.instruments[i].normalRangeHi, 1)) {
+            if (ImGui::InputScalarN(rangeHiTag, ImGuiDataType_U8, &mSoundFont.instruments[i].normalRangeHi, 1)) {
                 modified = true;
             }
             ImGui::SameLine();
             ImGui::TextUnformatted("  Release Rate ");
             ImGui::SameLine();
-            if (ImGui::InputScalarN(releaseRateTag.get(), ImGuiDataType_U8, &mSoundFont.instruments[i].releaseRate, 1)) {
+            if (ImGui::InputScalarN(releaseRateTag, ImGuiDataType_U8, &mSoundFont.instruments[i].releaseRate, 1)) {
                 modified = true;
             }
             DrawSample("Low Note Sound", &mSoundFont.instruments[i].lowNoteSound, &modified);
@@ -394,11 +392,9 @@ void CustomSoundFontWindow::DrawInstruments(bool locked) const {
 }
 
 void CustomSoundFontWindow::DrawSfxTbl(bool locked) const {
-    auto sfxTreeTag = std::make_unique<char[]>(sizeof("Sfx()") + 8);
-    sprintf(sfxTreeTag.get(), "Sfx(%u)", mSoundFont.numSfx);
-    if (ImGui::TreeNode(sfxTreeTag.get())) {
-        auto tuningTag = std::make_unique<char[]>(TAG_SIZE("##"));
-
+    char sfxTreeTag[sizeof("Sfx()") + 3];
+    sprintf(sfxTreeTag, "Sfx(%u)", mSoundFont.numSfx);
+    if (ImGui::TreeNode(sfxTreeTag)) {
         for (unsigned int i = 0; i < mSoundFont.numSfx; i++) {
             bool modified;
             DrawSample("Sfx", &mSoundFont.sfx[i].sample, &modified);
@@ -406,15 +402,16 @@ void CustomSoundFontWindow::DrawSfxTbl(bool locked) const {
                 mSoundFont.sfx[i].modified = true;
             }
         }
+        ImGui::TreePop();
     }
 }
 
 static void DrawSample(const char* type, ZSample* sample, bool* modified) {
-    auto sampleButtonTag = std::make_unique<char[]>(TAG_SIZE(ICON_FA_PENCIL"##"));
-    sprintf(sampleButtonTag.get(), "%s##%p", ICON_FA_PENCIL, &sample->path);
+    char sampleButtonTag[TAG_SIZE(ICON_FA_PENCIL"##")];
+    sprintf(sampleButtonTag, "%s##%p", ICON_FA_PENCIL, &sample->path);
     ImGui::Indent();
-    if (sample->path != nullptr) {
-        auto tuningTag = std::make_unique<char[]>(TAG_SIZE("##"));
+    if (sample->path != nullptr && sample->path[0] != 0) {
+        char tuningTag[TAG_SIZE("##")];
 
         //ImGui::Text("%s %s  ",type, sample->path);
         const char* sampleStart = strrchr(sample->path, PATH_SEPARATOR) + 1;
@@ -422,22 +419,22 @@ static void DrawSample(const char* type, ZSample* sample, bool* modified) {
         ImGui::Text("%s", type);
         ImGui::SameLine();
         ImGui::TextEx(sampleStart, sampleEnd);
-        sprintf(tuningTag.get(), "##%p", &sample->path);
+        sprintf(tuningTag, "##%p", &sample->path);
 
         ImGui::SameLine();
-        if (ImGui::Button(sampleButtonTag.get())) {
+        if (ImGui::Button(sampleButtonTag)) {
             goto openNewSample;
         }
         ImGui::SameLine();
         ImGui::TextUnformatted("Tuning");
         ImGui::SameLine();
-        if (ImGui::InputScalarN(tuningTag.get(), ImGuiDataType_Float, &sample->tuning, 1)) {
+        if (ImGui::InputScalarN(tuningTag, ImGuiDataType_Float, &sample->tuning, 1)) {
             *modified = true;
         }
     } else {
         ImGui::Text("%s Empty", type);
         ImGui::SameLine();
-        if (ImGui::Button(sampleButtonTag.get())) {
+        if (ImGui::Button(sampleButtonTag)) {
             openNewSample:
             if (GetOpenFilePath(const_cast<char**>(&sample->path), FileBoxType::Max)) {
                 *modified = true;
@@ -482,7 +479,6 @@ static void SaveSample(ZSample* sample, tinyxml2::XMLElement* elem, Archive* a) 
             std::unique_ptr<char[]> sampleXmlPath;
             const char* fileName = strrchr(sample->path, '/');
             fileName++;
-            char* archivePath;
             uint32_t numChannels;
             uint64_t sampleRate;
             uint64_t numFrames;
@@ -526,8 +522,6 @@ static void WriteInstrument(ZSample* zSample, tinyxml2::XMLElement* instrument, 
     tinyxml2::XMLElement* inst = instrument->InsertNewChildElement(name);
     if (zSample->path != nullptr) {
         SaveSample(zSample, inst, a);
-        //inst->SetAttribute("SampleRef", zSample->path);
-        //inst->SetAttribute("Tuning", zSample->tuning);
     }
     instrument->InsertEndChild(inst);
 }
