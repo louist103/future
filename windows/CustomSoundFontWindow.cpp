@@ -30,37 +30,6 @@ static void DrawSample(const char* type, ZSample* sample, bool* modified);
 
 #define TAG_SIZE(n) (sizeof(n) + sizeof(void*)*2)
 
-static const char* GetMediumStr(uint8_t medium) {
-    switch (medium) {
-        case 0:
-            return "Ram";
-        case 1:
-            return "Unk";
-        case 2:
-            return "Cart";
-        case 3:
-            return "Disk";
-        case 5:
-            return "RamUnloaded";
-        default:
-            return "ERROR";
-    }
-}
-
-static const char* GetCachePolicyStr(uint8_t policy) {
-    switch (policy) {
-        case 0:
-            return "Temporary";
-        case 1:
-            return "Persistent";
-        case 2:
-            return "Either";
-        case 3:
-            return "Permanent";
-        default:
-            return "ERROR";
-    }
-}
 // strup but using `new` for compatibility with the file box API
 static const char* StrDupNew(const char* orig) {
     if (orig == nullptr) {
@@ -81,8 +50,7 @@ CustomSoundFontWindow::~CustomSoundFontWindow() {
     ClearSoundFont();
 }
 
-void CustomSoundFontWindow::ClearPathBuff()
-{
+void CustomSoundFontWindow::ClearPathBuff() {
     if (mPathBuff != nullptr) {
         delete[] mPathBuff;
         mPathBuff = nullptr;
@@ -396,7 +364,7 @@ void CustomSoundFontWindow::DrawSfxTbl(bool locked) const {
     sprintf(sfxTreeTag, "Sfx(%u)", mSoundFont.numSfx);
     if (ImGui::TreeNode(sfxTreeTag)) {
         for (unsigned int i = 0; i < mSoundFont.numSfx; i++) {
-            bool modified;
+            bool modified = false;
             DrawSample("Sfx", &mSoundFont.sfx[i].sample, &modified);
             if (modified) {
                 mSoundFont.sfx[i].modified = true;
@@ -467,6 +435,13 @@ enum AudioType {
     flac,
 };
 
+constexpr static std::array<const char*, 4> audioTypeToStr = {
+    "mp3",
+    "wav",
+    "ogg",
+    "flac",
+};
+
 constexpr static char fontXmlBase[] = "custom/fonts/";
 constexpr static char sampleNameBase[] = "custom/samples/";
 constexpr static char sampleDataBase[] = "custom/sampleData/";
@@ -475,6 +450,7 @@ constexpr static char sampleXmlBase[] = "custom/samples/";
 static void SaveSample(ZSample* sample, tinyxml2::XMLElement* elem, Archive* a) {
     if (sample->path != nullptr) {
         if (sample->path[0] == '/') {
+            AudioType type;
             std::unique_ptr<char[]> samplePath;
             std::unique_ptr<char[]> sampleXmlPath;
             const char* fileName = strrchr(sample->path, '/');
@@ -482,7 +458,7 @@ static void SaveSample(ZSample* sample, tinyxml2::XMLElement* elem, Archive* a) 
             uint32_t numChannels;
             uint64_t sampleRate;
             uint64_t numFrames;
-
+            SeqMetaInfo info;
             mio::mmap_source file(sample->path);
             if (WAV_CHECK(file.data())) {
                 drwav wav;
@@ -490,25 +466,34 @@ static void SaveSample(ZSample* sample, tinyxml2::XMLElement* elem, Archive* a) 
                 numChannels = wav.channels;
                 sampleRate = wav.sampleRate;
                 numFrames = wav.totalPCMFrameCount;
-                SeqMetaInfo info;
-                info.fanfare = true;
-                info.loopEnd.i = numFrames;
-                info.loopStart.i = 0;
+                type = AudioType::wav;
 
                 if (!(wav.translatedFormatTag == DR_WAVE_FORMAT_PCM && wav.bitsPerSample == 16)) {
                     // Uh oh
                     return;
                 }
-                sampleXmlPath = CreateSampleXml(const_cast<char*>(fileName), "wav", numFrames, numChannels, &info, sampleRate, true, a);
-                CopySampleData(const_cast<char*>(sample->path), const_cast<char*>(fileName), true, file.size(), a);
-
             } else if (MP3_CHECK(file.data())) {
-
+                drmp3 mp3;
+                drmp3_init_memory(&mp3, file.data(), file.size(), nullptr);
+                numChannels = mp3.channels;
+                sampleRate = mp3.sampleRate;
+                numFrames = drmp3_get_pcm_frame_count(&mp3);
+                type = AudioType::mp3;
             } else if (FLAC_CHECK(file.data())) {
-
+                drflac* flac = drflac_open_memory(file.data(), file.size(), nullptr);
+                numChannels = flac->channels;
+                sampleRate = flac->sampleRate;
+                numFrames = flac->totalPCMFrameCount;
+                type = AudioType::flac;
             } else if (OGG_CHECK(file.data())) {
 
             }
+            info.fanfare = true;
+            info.loopEnd.i = numFrames;
+            info.loopStart.i = 0;
+
+            sampleXmlPath = CreateSampleXml(const_cast<char*>(fileName), audioTypeToStr[type], numFrames, numChannels, &info, sampleRate, true, a);
+            CopySampleData(const_cast<char*>(sample->path), const_cast<char*>(fileName), true, file.size(), a);
             elem->SetAttribute("SampleRef", sampleXmlPath.get());
             elem->SetAttribute("Tuning", ((float)sampleRate * (float)numChannels) / 32000.0f);
             return;
