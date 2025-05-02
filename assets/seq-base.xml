@@ -1,4 +1,4 @@
-<Sequence Index="0" Medium="Cart" CachePolicy="Either" Size="0" Streamed="true">
+<Sequence Index="0" Medium="Cart" CachePolicy="Temporary" Size="0" Streamed="true">
     <FontIndicies>
     </FontIndicies>
 </Sequence>

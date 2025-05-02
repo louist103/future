@@ -46,7 +46,7 @@ static const char gSampleBaseXml[] = "<Sample Version=\"0\" Codec=\"S16\" Medium
 </ADPCMLoop>"\
 "</Sample>";
 
-static const char gSequenceBaseXml[] = "<Sequence Index=\"0\" Medium=\"Cart\" CachePolicy=\"Either\" Size=\"0\" Streamed=\"true\">\
+static const char gSequenceBaseXml[] = "<Sequence Index=\"0\" Medium=\"Cart\" CachePolicy=\"Temporary\" Size=\"0\" Streamed=\"true\">\
 <FontIndicies>\
 </FontIndicies>\
 </Sequence>";
