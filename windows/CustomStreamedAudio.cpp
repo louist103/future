@@ -1052,7 +1052,11 @@ bool CustomStreamedAudioWindow::GetTranscode() const {
 static bool FillFileCallback(char* path) {
     char* ext = strrchr(path, '.');
     if (ext != nullptr) {
-        if ((strcmp(ext, ".wav") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".opus") == 0 || strcmp(ext, ".mp3") == 0) || strcmp(ext, ".flac") == 0) {
+        char newStr[8]{};
+        for (size_t i = 0; ext[i] != 0; i++) {
+            newStr[i] = (char)tolower(ext[i]);
+        }
+        if ((strcmp(newStr, ".wav") == 0 || strcmp(newStr, ".ogg") == 0 || strcmp(newStr, ".opus") == 0 || strcmp(newStr, ".mp3") == 0) || strcmp(newStr, ".flac") == 0) {
             return true;
         }
     }

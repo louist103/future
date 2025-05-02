@@ -44,7 +44,11 @@ void CustomSequencedAudioWindow::ClearSaveBuff()
 static bool FillSeqFileCallback(char* path) {
     char* ext = strrchr(path, '.');
     if (ext != nullptr) {
-        if ((strcmp(ext, ".seq") == 0 || strcmp(ext, ".aseq") == 0 || strcmp(ext, ".meta") == 0)) {
+        char newStr[8]{};
+        for (size_t i = 0; ext[i] != 0; i++) {
+            newStr[i] = (char)tolower(ext[i]);
+        }
+        if ((strcmp(newStr, ".seq") == 0 || strcmp(newStr, ".aseq") == 0 || strcmp(newStr, ".meta") == 0)) {
             return true;
         }
     }
@@ -54,21 +58,37 @@ static bool FillSeqFileCallback(char* path) {
 static bool FillMMRSFileCallback(char* path) {
     char* ext = strrchr(path, '.');
     if (ext != nullptr) {
-        return strcmp(ext, ".mmrs") == 0;
+        char newStr[8]{};
+        for (size_t i = 0; ext[i] != 0; i++) {
+            newStr[i] = (char)tolower(ext[i]);
+        }
+        return strcmp(newStr, ".mmrs") == 0;
     }
     return false;
 }
 
 static bool IsSeqExt(const char* ext) {
-    return strcmp(ext, ".zseq") == 0 || strcmp(ext, ".aseq") == 0 || strcmp(ext, ".seq") == 0;
+    char newStr[8]{};
+    for (size_t i = 0; ext[i] != 0; i++) {
+        newStr[i] = (char)tolower(ext[i]);
+    }
+    return strcmp(newStr, ".zseq") == 0 || strcmp(newStr, ".aseq") == 0 || strcmp(newStr, ".seq") == 0;
 }
 
 static bool IsFontExt(const char* ext) {
-    return strcmp(ext, ".zbank") == 0;
+    char newStr[8]{};
+    for (size_t i = 0; ext[i] != 0; i++) {
+        newStr[i] = (char)tolower(ext[i]);
+    }
+    return strcmp(newStr, ".zbank") == 0;
 }
 
 static bool IsNoteExt(const char* ext) {
-    return strcmp(ext, ".zsound") == 0;
+    char newStr[8]{};
+    for (size_t i = 0; ext[i] != 0; i++) {
+        newStr[i] = (char)tolower(ext[i]);
+    }
+    return strcmp(newStr, ".zsound") == 0;
 }
 
 void CustomSequencedAudioWindow::CreateFilePairs() {
