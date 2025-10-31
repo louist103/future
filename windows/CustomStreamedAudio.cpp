@@ -1176,17 +1176,21 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
         return;
     }
 
-    const ImVec2 fiveCharsWidth = ImGui::CalcTextSize("00000000");
+    const ImVec2 fiveCharsWidth = ImGui::CalcTextSize("0000000");
     const ImVec2 labelWidth = ImGui::CalcTextSize(loopToggleLabels[0]);
     ImGui::TextUnformatted("Files to Pack:");
 
     const float windowHeight = ImGui::GetWindowHeight();
+    const float windowWidth = ImGui::GetWindowWidth();
+    const float controlsWidth = ImGui::CalcTextSize("Loop Start ").x + ImGui::CalcTextSize("Loop End ").x + ImGui::CalcTextSize("Fanfare ").x;
+    const float maxNameWidth = windowWidth - controlsWidth - 50.f - ImGui::CalcTextSize("... ").x;
     float maxLen = 0;
     for (auto f : mFileQueue) {
-        if ((uintptr_t)f & 1 != 1) {
+        if (((uintptr_t)f & 1) != 1) {
             maxLen = std::max(maxLen, ImGui::CalcTextSize(strrchr(f, PATH_SEPARATOR)).x);
         }
     }
+    maxLen = std::min(maxLen, maxNameWidth);
     ImGui::SameLine();
     if (ImGui::Toggle(loopToggleLabels[mLoopIsISamples], &mLoopIsISamples)) {
         FillFanfareMap();
@@ -1195,13 +1199,13 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
     //if (labelWidth.x >   maxLen) {
     //    totalPadding += labelWidth.x;
     //}
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + totalPadding);
-    ImGui::SameLine();
+    // ImGui::SetCursorPosX(ImGui::GetCursorPosX() + totalPadding);
+    ImGui::SameLine(maxLen + ImGui::CalcTextSize("... ").x);
     const float startPos = ImGui::GetCursorPosX();
     ImGui::TextUnformatted("Loop Start");
     ImGui::SameLine();
     const float endPos = ImGui::GetCursorPosX();
-    ImGui::TextUnformatted("LoopEnd");
+    ImGui::TextUnformatted("Loop End");
     ImGui::SameLine();
     const float fanfarePos = ImGui::GetCursorPosX();
     ImGui::TextUnformatted("Fanfare");
@@ -1216,7 +1220,7 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
     ImGui::BeginChild("File List", {}, 0, 0);
 
     for (const auto s : mFileQueue) {
-        if ((uintptr_t)s & 1 == 1) {
+        if (((uintptr_t)s & 1) == 1) {
             continue;
         }
         const float scroll = ImGui::GetScrollY();
@@ -1230,13 +1234,28 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
         char* fileName = strrchr(s, PATH_SEPARATOR);
         fileName++;
         size_t len = strlen(fileName);
+        char displayName[len+3];
+        strncpy(displayName, fileName, len+1);
         auto checkboxTag = std::make_unique<char[]>(len + sizeof("Fanfare##") + 1);
         auto loopStartTag = std::make_unique<char[]>(len + sizeof("Loop Start##") + 1);
         auto loopEndTag = std::make_unique<char[]>(len + sizeof("Loop End##") + 1);
         sprintf(checkboxTag.get(), "##ff%s", fileName);
         sprintf(loopStartTag.get(), "##start%s", fileName);
         sprintf(loopEndTag.get(), "##end%s", fileName);
-        ImGui::Text("%s", fileName);       
+        bool truncated = false;
+        while (ImGui::CalcTextSize(displayName).x > maxNameWidth) {
+            displayName[len - 1] = '\0';
+            --len;
+            truncated = true;
+        }
+        if (truncated) {
+            displayName[len] = '.';
+            displayName[len+1] = '.';
+            displayName[len+2] = '.';
+            displayName[len+3] = '\0';
+            len += 3;
+        }
+        ImGui::Text("%s", displayName);
         ImGui::SameLine(totalPadding);
         ImGui::SetCursorPosX(startPos);
         ImGui::PushItemWidth(fiveCharsWidth.x);
