@@ -19,6 +19,7 @@
 #define DR_FLAC_IMPLEMENTATION
 #include "dr_flac.h"
 
+#include <algorithm>
 #include <ogg/ogg.h>
 #include <vorbis/vorbisfile.h>
 #include <vorbis/vorbisenc.h>
@@ -217,7 +218,8 @@ std::unique_ptr<char[]> CreateSampleXml(char* fileName, const char* audioType, u
     return sampleXmlPath;
 }
 
-static void CreateSequenceXml(char* fileName, char* fontPath, unsigned int length, bool isFanfare, bool stereo, Archive* a) {
+static void CreateSequenceXml(char* fileName, char* fontPath, unsigned int length, const SeqMetaInfo* info, bool stereo, Archive* a) {
+    const bool isFanfare = info->fanfare;
     tinyxml2::XMLDocument seqBaseRoot;
     tinyxml2::XMLError e = seqBaseRoot.LoadFile("assets/seq-base.xml");
     if (e != 0) {
@@ -254,6 +256,13 @@ static void CreateSequenceXml(char* fileName, char* fontPath, unsigned int lengt
         snprintf(seqXmlPath.get(), seqPathLen, "%s%s_SEQ.xml_fanfare", seqXmlBase, fileName);
     }
     root->SetAttribute("Stereo", stereo);
+    // Ship of Harkinian reads these as seconds, clamped to 0-60.
+    if (info->fadeInSeconds > 0.0f) {
+        root->SetAttribute("FadeIn", info->fadeInSeconds);
+    }
+    if (info->fadeOutSeconds > 0.0f) {
+        root->SetAttribute("FadeOut", info->fadeOutSeconds);
+    }
     seqBaseRoot.InsertEndChild(root);
     root->Accept(&p);
 
@@ -990,7 +999,7 @@ static void ProcessAudioFile(std::vector<char*>* fileQueue, std::unordered_map<c
     float lengthF = (float)numFrames / (float)sampleRate;
     lengthF = ceilf(lengthF);
     unsigned int length = static_cast<unsigned int>(lengthF);
-    CreateSequenceXml(fileName, fontXmlPath.get(), length, seqMetaMap->at(fileName).fanfare, numChannels == 2, a);
+    CreateSequenceXml(fileName, fontXmlPath.get(), length, &seqMetaMap->at(fileName), numChannels == 2, a);
     // Since the function that allocates the paths allocates them 2 byte aligned, we can use the lowest bit as a signal that this file has been processed.
     uintptr_t inputU = reinterpret_cast<uintptr_t>(*inputp);
     inputU |= 1;
@@ -1203,6 +1212,12 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
     const float endPos = ImGui::GetCursorPosX();
     ImGui::TextUnformatted("LoopEnd");
     ImGui::SameLine();
+    const float fadeInPos = ImGui::GetCursorPosX();
+    ImGui::TextUnformatted("Fade In (s)");
+    ImGui::SameLine();
+    const float fadeOutPos = ImGui::GetCursorPosX();
+    ImGui::TextUnformatted("Fade Out (s)");
+    ImGui::SameLine();
     const float fanfarePos = ImGui::GetCursorPosX();
     ImGui::TextUnformatted("Fanfare");
     ImGui::SameLine();
@@ -1236,6 +1251,10 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
         sprintf(checkboxTag.get(), "##ff%s", fileName);
         sprintf(loopStartTag.get(), "##start%s", fileName);
         sprintf(loopEndTag.get(), "##end%s", fileName);
+        auto fadeInTag = std::make_unique<char[]>(len + sizeof("##fadein") + 1);
+        auto fadeOutTag = std::make_unique<char[]>(len + sizeof("##fadeout") + 1);
+        sprintf(fadeInTag.get(), "##fadein%s", fileName);
+        sprintf(fadeOutTag.get(), "##fadeout%s", fileName);
         ImGui::Text("%s", fileName);       
         ImGui::SameLine(totalPadding);
         ImGui::SetCursorPosX(startPos);
@@ -1244,6 +1263,16 @@ void CustomStreamedAudioWindow::DrawPendingFilesList() {
         ImGui::SameLine();
         ImGui::SetCursorPosX(endPos);
         ImGui::InputScalarN(loopEndTag.get(), type, &mSeqMetaMap.at(fileName).loopEnd, 1);
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(fadeInPos);
+        if (ImGui::InputFloat(fadeInTag.get(), &mSeqMetaMap.at(fileName).fadeInSeconds, 0.0f, 0.0f, "%.2f")) {
+            mSeqMetaMap.at(fileName).fadeInSeconds = std::clamp(mSeqMetaMap.at(fileName).fadeInSeconds, 0.0f, 60.0f);
+        }
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(fadeOutPos);
+        if (ImGui::InputFloat(fadeOutTag.get(), &mSeqMetaMap.at(fileName).fadeOutSeconds, 0.0f, 0.0f, "%.2f")) {
+            mSeqMetaMap.at(fileName).fadeOutSeconds = std::clamp(mSeqMetaMap.at(fileName).fadeOutSeconds, 0.0f, 60.0f);
+        }
         ImGui::SameLine();
         ImGui::PopItemWidth();
         ImGui::SetCursorPosX(fanfareStartPos);

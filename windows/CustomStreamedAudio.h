@@ -13,6 +13,8 @@ typedef union IntFloat {
 typedef struct SeqMetaInfo {
     IntFloat loopStart;
     IntFloat loopEnd;
+    float fadeInSeconds = 0.0f;
+    float fadeOutSeconds = 0.0f;
     bool fanfare;
 } SeqMetaInfo;
 
